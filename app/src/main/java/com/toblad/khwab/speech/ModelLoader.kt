@@ -1,19 +1,36 @@
 package com.toblad.khwab.speech
 
+import android.content.Context
 import android.util.Log
 
-class ModelLoader {
+class ModelLoader(
+    private val context: Context
+) {
 
     companion object {
         private const val TAG = "ModelLoader"
     }
 
     fun loadModel() {
+        try {
 
-        Log.d(TAG, "Loading Offline Speech Model...")
+            val files = context.assets.list("models/whisper")
 
-        // Whisper model will be loaded here later
+            if (files.isNullOrEmpty()) {
+                Log.d(TAG, "No model files found.")
+                return
+            }
 
-        Log.d(TAG, "Model Loaded Successfully")
+            Log.d(TAG, "===== Whisper Model Files =====")
+
+            files.forEach {
+                Log.d(TAG, it)
+            }
+
+            Log.d(TAG, "===============================")
+
+        } catch (e: Exception) {
+            Log.e(TAG, "Error loading model", e)
+        }
     }
 }

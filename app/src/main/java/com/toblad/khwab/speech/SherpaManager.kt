@@ -7,7 +7,7 @@ class SherpaManager(
     private val context: Context
 ) {
 
-    private val modelLoader = ModelLoader()
+    private val modelLoader = ModelLoader(context)
     private val audioRecorder = AudioRecorder()
     private val speechRecognizer = SpeechRecognizer()
 
