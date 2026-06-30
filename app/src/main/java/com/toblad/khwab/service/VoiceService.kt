@@ -6,17 +6,20 @@ import android.os.Build
 import android.os.IBinder
 import android.util.Log
 import com.toblad.khwab.overlay.FloatingWindow
-
+import com.toblad.khwab.speech.SherpaManager
 class VoiceService : Service() {
 
     private lateinit var floatingWindow: FloatingWindow
-
+    private lateinit var sherpaManager: SherpaManager
     override fun onCreate() {
         super.onCreate()
 
         Log.d("KHWAB", "VoiceService Created")
 
         floatingWindow = FloatingWindow(this)
+
+        sherpaManager = SherpaManager(this)
+        sherpaManager.initialize()
 
         NotificationHelper.createNotificationChannel(this)
 
