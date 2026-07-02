@@ -51,7 +51,5 @@ dependencies {
     debugImplementation(libs.androidx.compose.ui.tooling)
 
 
-    implementation("com.bihe0832.android:lib-sherpa-onnx:8.5.4")
-
-
+    implementation(files("libs/sherpa-onnx-1.13.3.aar"))
 }
