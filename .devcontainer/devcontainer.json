@@ -1,0 +1,6 @@
+{
+      "name": "Khwab Android",
+        "build": {
+            "dockerfile": "Dockerfile"
+              }
+              }
