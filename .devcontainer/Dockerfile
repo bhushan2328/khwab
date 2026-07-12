@@ -1,9 +1,10 @@
 FROM mcr.microsoft.com/devcontainers/base:ubuntu
 
 ENV DEBIAN_FRONTEND=noninteractive
+ENV JAVA_HOME=/usr/lib/jvm/java-21-openjdk-amd64
 ENV ANDROID_HOME=/opt/android-sdk
 ENV ANDROID_SDK_ROOT=/opt/android-sdk
-ENV PATH=$PATH:$ANDROID_HOME/cmdline-tools/latest/bin:$ANDROID_HOME/platform-tools
+ENV PATH=${JAVA_HOME}/bin:${ANDROID_HOME}/cmdline-tools/latest/bin:${ANDROID_HOME}/platform-tools:${PATH}
 
 RUN apt-get update && \
     apt-get install -y \
@@ -29,4 +30,3 @@ RUN sdkmanager \
     "platforms;android-36" \
     "build-tools;37.0.0"
 
-RUN echo "sdk.dir=${ANDROID_HOME}" > /etc/android-sdk-location
