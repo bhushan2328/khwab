@@ -1,0 +1,29 @@
+package com.toblad.khwab.core.skill.skills
+
+import com.toblad.khwab.core.model.ActionType
+import com.toblad.khwab.core.model.IntentData
+import com.toblad.khwab.core.model.IntentType
+import com.toblad.khwab.core.model.Plan
+import com.toblad.khwab.core.model.PlanStep
+import com.toblad.khwab.core.skill.Skill
+
+class SearchSkill : Skill {
+
+    override fun supports(intent: IntentData): Boolean {
+        return intent.intent == IntentType.SEARCH_WEB
+    }
+
+    override fun createPlan(intent: IntentData): Plan {
+
+        val query = intent.entities.firstOrNull()?.value ?: ""
+
+        return Plan(
+            steps = listOf(
+                PlanStep(
+                    action = ActionType.SEARCH_WEB,
+                    target = query
+                )
+            )
+        )
+    }
+}
