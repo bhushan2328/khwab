@@ -25,7 +25,8 @@ RUN yes | sdkmanager --licenses
 
 RUN sdkmanager \
     "platform-tools" \
+    "platforms;android-37" \
     "platforms;android-36" \
-    "build-tools;36.0.0"
+    "build-tools;37.0.0"
 
 RUN echo "sdk.dir=${ANDROID_HOME}" > /etc/android-sdk-location
