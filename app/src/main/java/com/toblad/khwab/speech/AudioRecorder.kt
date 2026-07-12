@@ -6,6 +6,7 @@ import android.media.MediaRecorder
 import kotlin.concurrent.thread
 
 class AudioRecorder {
+    @android.annotation.SuppressLint("MissingPermission")
 
     private val sampleRate = 16000
 

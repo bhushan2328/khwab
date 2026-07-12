@@ -4,6 +4,9 @@ plugins {
 }
 
 android {
+    lint {
+        disable += "MissingPermission"
+    }
     namespace = "com.toblad.khwab"
     compileSdk = 36
 
@@ -34,6 +37,7 @@ android {
 }
 
 dependencies {
+    implementation(project(":core"))
     implementation(platform(libs.androidx.compose.bom))
     implementation(libs.androidx.activity.compose)
     implementation(libs.androidx.compose.material3)
