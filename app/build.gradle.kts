@@ -5,7 +5,7 @@ plugins {
 
 android {
     namespace = "com.toblad.khwab"
-    compileSdk = 37
+    compileSdk = 36
 
     defaultConfig {
         applicationId = "com.toblad.khwab"
