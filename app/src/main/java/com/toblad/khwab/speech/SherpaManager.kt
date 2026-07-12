@@ -1,37 +1,35 @@
 package com.toblad.khwab.speech
 
 import android.content.Context
-import android.util.Log
+import com.toblad.khwab.speech.listener.RecognitionListener
 
 class SherpaManager(
     private val context: Context
 ) {
 
-    private val modelLoader = ModelLoader(context)
-    private val audioRecorder = AudioRecorder()
-    private val speechRecognizer = SpeechRecognizer()
+    private val engine = SherpaEngine(context)
+    private val recorder = AudioRecorder()
 
-    companion object {
-        private const val TAG = "SherpaManager"
+    fun setRecognitionListener(listener: RecognitionListener) {
+        engine.setRecognitionListener(listener)
     }
 
     fun initialize() {
-        Log.d(TAG, "Initializing Speech Engine...")
-
-        modelLoader.loadModel()
-
-        Log.d(TAG, "Speech Engine Ready")
+        engine.initialize()
     }
 
     fun startListening() {
-        Log.d(TAG, "Start Listening")
-
-        audioRecorder.startRecording()
+        recorder.startRecording { samples ->
+            engine.processAudio(samples)
+        }
     }
 
     fun stopListening() {
-        Log.d(TAG, "Stop Listening")
+        recorder.stopRecording()
+    }
 
-        audioRecorder.stopRecording()
+    fun release() {
+        recorder.release()
+        engine.release()
     }
 }

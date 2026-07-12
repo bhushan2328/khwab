@@ -2,6 +2,15 @@ package com.toblad.khwab.speech
 
 import android.content.Context
 import android.util.Log
+import java.io.File
+
+data class ModelPaths(
+    val encoder: String,
+    val decoder: String,
+    val joiner: String,
+    val tokens: String,
+    val bpe: String
+)
 
 class ModelLoader(
     private val context: Context
@@ -9,28 +18,54 @@ class ModelLoader(
 
     companion object {
         private const val TAG = "ModelLoader"
+        private const val ASSET_DIR = "models/zipformer"
+        private const val OUTPUT_DIR = "zipformer"
     }
 
-    fun loadModel() {
-        try {
+    fun loadModel(): ModelPaths {
 
-            val files = context.assets.list("models/whisper")
+        val outputDir = File(context.filesDir, OUTPUT_DIR)
 
-            if (files.isNullOrEmpty()) {
-                Log.d(TAG, "No model files found.")
-                return
-            }
-
-            Log.d(TAG, "===== Whisper Model Files =====")
-
-            files.forEach {
-                Log.d(TAG, it)
-            }
-
-            Log.d(TAG, "===============================")
-
-        } catch (e: Exception) {
-            Log.e(TAG, "Error loading model", e)
+        if (!outputDir.exists()) {
+            outputDir.mkdirs()
         }
+
+        val assetManager = context.assets
+        val files = assetManager.list(ASSET_DIR)
+            ?: throw IllegalStateException("Zipformer assets not found.")
+
+        files.forEach { fileName ->
+            val outFile = File(outputDir, fileName)
+
+            if (!outFile.exists()) {
+                assetManager.open("$ASSET_DIR/$fileName").use { input ->
+                    outFile.outputStream().use { output ->
+                        input.copyTo(output)
+                    }
+                }
+                Log.d(TAG, "Copied: $fileName")
+            }
+        }
+
+        fun requireFile(prefix: String): File =
+            outputDir.listFiles()?.firstOrNull {
+                it.name.startsWith(prefix)
+            } ?: throw IllegalStateException("Missing model file: $prefix")
+
+        val encoder = requireFile("encoder")
+        val decoder = requireFile("decoder")
+        val joiner = requireFile("joiner")
+        val tokens = requireFile("tokens")
+        val bpe = requireFile("bpe")
+
+        Log.d(TAG, "Zipformer model prepared successfully.")
+
+        return ModelPaths(
+            encoder = encoder.absolutePath,
+            decoder = decoder.absolutePath,
+            joiner = joiner.absolutePath,
+            tokens = tokens.absolutePath,
+            bpe = bpe.absolutePath
+        )
     }
 }
