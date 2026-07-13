@@ -30,3 +30,5 @@ include(":app")
 include(":core")
 
 project(":core").projectDir = file("khwab-core/core")
+
+
