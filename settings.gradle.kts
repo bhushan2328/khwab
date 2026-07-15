@@ -28,7 +28,9 @@ rootProject.name = "Khwab"
 
 include(":app")
 include(":core")
+include(":integration")
 
 project(":core").projectDir = file("khwab-core/core")
 
 
+project(":integration").projectDir = file("khwab-integration/integration")
