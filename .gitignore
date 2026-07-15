@@ -13,3 +13,9 @@
 .externalNativeBuild
 .cxx
 local.properties
+khwab-integration/
+khwab-core/
+
+# Independent repositories
+khwab-core/
+khwab-integration/
