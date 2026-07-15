@@ -19,3 +19,9 @@ khwab-core/
 # Independent repositories
 khwab-core/
 khwab-integration/
+
+# Android Studio local files
+.idea/.name
+.idea/codeStyles/
+.idea/deviceManager.xml
+.idea/kotlinc.xml
