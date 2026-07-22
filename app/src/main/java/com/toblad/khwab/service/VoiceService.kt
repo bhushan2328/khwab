@@ -7,49 +7,113 @@ import android.util.Log
 import com.toblad.khwab.executor.AndroidExecutionEngine
 import com.toblad.khwab.integration.api.KhwabIntegrationProvider
 import com.toblad.khwab.integration.api.request.IntegrationRequest
+import com.toblad.khwab.overlay.FloatingWindow
 import com.toblad.khwab.speech.SherpaManager
 
 class VoiceService : Service() {
 
+    companion object {
+        private const val TAG = "VoiceService"
+        private const val NOTIFICATION_ID = 1001
+    }
+
     private lateinit var sherpaManager: SherpaManager
     private lateinit var executionEngine: AndroidExecutionEngine
+    private lateinit var floatingWindow: FloatingWindow
 
     private val integration = KhwabIntegrationProvider.create()
 
     override fun onCreate() {
         super.onCreate()
 
-        integration.initialize()
+        Log.d(TAG, "VoiceService created")
+
         executionEngine = AndroidExecutionEngine(this)
-
+        floatingWindow = FloatingWindow(this)
         sherpaManager = SherpaManager(this)
+    }
 
-        sherpaManager.setRecognitionListener { result ->
+    override fun onStartCommand(
+        intent: Intent?,
+        flags: Int,
+        startId: Int
+    ): Int {
 
-            Log.d("Sherpa", result.text)
+        try {
 
-            val response = integration.process(
-                IntegrationRequest(
-                    input = result.text
-                )
+            Log.d(TAG, "Starting foreground service")
+
+            NotificationHelper.createNotificationChannel(this)
+
+            startForeground(
+                NOTIFICATION_ID,
+                NotificationHelper.createNotification(this)
             )
 
-            response.executionPlan?.let { plan ->
+            Log.d(TAG, "Showing floating window")
 
-                Log.d("Khwab", "Executing: ${plan.action}")
+            floatingWindow.show()
 
-                val success = executionEngine.execute(plan)
+            Log.d(TAG, "Initializing integration")
 
-                Log.d("Khwab", "Execution Success: $success")
+            integration.initialize()
+
+            sherpaManager.setRecognitionListener { result ->
+
+                Log.d("Sherpa", result.text)
+
+                val response = integration.process(
+                    IntegrationRequest(
+                        input = result.text
+                    )
+                )
+
+                response.executionPlan?.let { plan ->
+
+                    Log.d("Khwab", "Executing: ${plan.action}")
+
+                    val success = executionEngine.execute(plan)
+
+                    Log.d("Khwab", "Execution Success: $success")
+                }
             }
+
+            Log.d(TAG, "Initializing Sherpa")
+
+            sherpaManager.initialize()
+
+            Log.d(TAG, "Starting listening")
+
+            sherpaManager.startListening()
+
+            Log.d(TAG, "VoiceService started successfully")
+
+        } catch (e: Exception) {
+
+            Log.e(TAG, "Failed to start VoiceService", e)
+
+            stopSelf()
         }
 
-        sherpaManager.initialize()
-        sherpaManager.startListening()
+        return START_STICKY
     }
 
     override fun onDestroy() {
-        sherpaManager.release()
+
+        Log.d(TAG, "Stopping VoiceService")
+
+        try {
+            sherpaManager.release()
+        } catch (_: Exception) {
+        }
+
+        try {
+            floatingWindow.hide()
+        } catch (_: Exception) {
+        }
+
+        stopForeground(STOP_FOREGROUND_REMOVE)
+
         super.onDestroy()
     }
 
