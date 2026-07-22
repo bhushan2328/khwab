@@ -47,16 +47,28 @@ class ModelLoader(
             }
         }
 
-        fun requireFile(prefix: String): File =
-            outputDir.listFiles()?.firstOrNull {
-                it.name.startsWith(prefix)
-            } ?: throw IllegalStateException("Missing model file: $prefix")
+        fun requireFile(fileName: String): File {
+            val file = File(outputDir, fileName)
+            require(file.exists()) {
+                "Missing model file: $fileName"
+            }
+            return file
+        }
 
-        val encoder = requireFile("encoder")
-        val decoder = requireFile("decoder")
-        val joiner = requireFile("joiner")
-        val tokens = requireFile("tokens")
-        val bpe = requireFile("bpe")
+        val encoder =
+            requireFile("encoder-epoch-99-avg-1-chunk-16-left-128.onnx")
+
+        val decoder =
+            requireFile("decoder-epoch-99-avg-1-chunk-16-left-128.onnx")
+
+        val joiner =
+            requireFile("joiner-epoch-99-avg-1-chunk-16-left-128.onnx")
+
+        val tokens =
+            requireFile("tokens.txt")
+
+        val bpe =
+            requireFile("bpe.model")
 
         Log.d(TAG, "Zipformer model prepared successfully.")
 
