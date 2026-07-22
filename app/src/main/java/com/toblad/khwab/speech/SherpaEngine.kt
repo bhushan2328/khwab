@@ -42,8 +42,10 @@ class SherpaEngine(
             decodingMethod = "greedy_search"
         )
 
+        // We are using absolute file paths from ModelLoader,
+        // so AssetManager must be null.
         recognizer = OnlineRecognizer(
-            context.assets,
+            null,
             config
         )
 
