@@ -1,27 +1,34 @@
 package com.toblad.khwab
 
+import android.content.Intent
+import android.os.Build
 import android.os.Bundle
+import android.widget.Toast
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
-import com.toblad.khwab.ui.theme.HomeScreen
-import com.toblad.khwab.ui.theme.KhwabTheme
-import android.widget.Toast
 import androidx.activity.result.contract.ActivityResultContracts
+import com.toblad.khwab.logging.LogModule
+import com.toblad.khwab.logging.Logger
 import com.toblad.khwab.permission.PermissionManager
+import com.toblad.khwab.service.VoiceService
 import com.toblad.khwab.state.AssistantState
 import com.toblad.khwab.state.AssistantStateManager
-import android.content.Intent
-import android.os.Build
-import com.toblad.khwab.service.VoiceService
-
-
-
+import com.toblad.khwab.ui.theme.HomeScreen
+import com.toblad.khwab.ui.theme.KhwabTheme
 
 class MainActivity : ComponentActivity() {
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+
+        // Initialize Logger
+        Logger.initialize(applicationContext)
+        Logger.info(
+            LogModule.SYSTEM,
+            "Khwab application started"
+        )
+
         val permissionManager = PermissionManager(this)
         val permissionLauncher =
             registerForActivityResult(
@@ -81,7 +88,6 @@ class MainActivity : ComponentActivity() {
                         AssistantStateManager.updateState(
                             AssistantState.STOPPED
                         )
-
 
                     }
 

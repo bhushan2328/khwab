@@ -2,24 +2,35 @@ package com.toblad.khwab.ui.theme
 
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.verticalScroll
+import androidx.compose.material3.Button
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.Text
-import androidx.compose.runtime.Composable
+import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import com.toblad.khwab.logging.LogReader
 
 @Composable
 fun StatusCard(
     status: String,
     statusColor: Color
 ) {
+
+    val context = LocalContext.current
+
+    var errorLog by remember {
+        mutableStateOf(LogReader.readError(context))
+    }
 
     Card(
         modifier = Modifier.fillMaxWidth(),
@@ -68,6 +79,43 @@ fun StatusCard(
                     fontSize = 16.sp,
                     fontWeight = FontWeight.SemiBold
                 )
+            }
+
+            Spacer(modifier = Modifier.height(24.dp))
+
+            Text(
+                text = "Latest Error",
+                color = KhwabWhite,
+                fontSize = 16.sp,
+                fontWeight = FontWeight.Bold
+            )
+
+            Spacer(modifier = Modifier.height(8.dp))
+
+            Box(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .height(140.dp)
+                    .verticalScroll(rememberScrollState())
+            ) {
+
+                Text(
+                    text = errorLog,
+                    color = KhwabGray,
+                    fontSize = 13.sp
+                )
+
+            }
+
+            Spacer(modifier = Modifier.height(16.dp))
+
+            Button(
+                onClick = {
+                    errorLog = LogReader.readError(context)
+                }
+            ) {
+
+                Text("Refresh")
 
             }
 
