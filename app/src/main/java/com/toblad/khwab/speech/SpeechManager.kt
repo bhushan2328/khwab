@@ -3,11 +3,11 @@ package com.toblad.khwab.speech
 import android.content.Context
 import com.toblad.khwab.speech.listener.RecognitionListener
 
-class SherpaManager(
+class SpeechManager(
     private val context: Context
 ) {
 
-    private val engine = SherpaEngine(context)
+    private val engine = WhisperEngine(context)
     private val recorder = AudioRecorder()
 
     fun setRecognitionListener(listener: RecognitionListener) {
@@ -33,3 +33,4 @@ class SherpaManager(
         engine.release()
     }
 }
+

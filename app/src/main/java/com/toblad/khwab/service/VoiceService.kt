@@ -8,7 +8,7 @@ import com.toblad.khwab.executor.AndroidExecutionEngine
 import com.toblad.khwab.integration.api.KhwabIntegrationProvider
 import com.toblad.khwab.integration.api.request.IntegrationRequest
 import com.toblad.khwab.overlay.FloatingWindow
-import com.toblad.khwab.speech.SherpaManager
+import com.toblad.khwab.speech.SpeechManager
 
 class VoiceService : Service() {
 
@@ -17,7 +17,7 @@ class VoiceService : Service() {
         private const val NOTIFICATION_ID = 1001
     }
 
-    private lateinit var sherpaManager: SherpaManager
+    private lateinit var speechManager: SpeechManager
     private lateinit var executionEngine: AndroidExecutionEngine
     private lateinit var floatingWindow: FloatingWindow
 
@@ -30,7 +30,7 @@ class VoiceService : Service() {
 
         executionEngine = AndroidExecutionEngine(this)
         floatingWindow = FloatingWindow(this)
-        sherpaManager = SherpaManager(this)
+        speechManager = SpeechManager(this)
     }
 
     override fun onStartCommand(
@@ -58,7 +58,7 @@ class VoiceService : Service() {
 
             integration.initialize()
 
-            sherpaManager.setRecognitionListener { result ->
+            speechManager.setRecognitionListener { result ->
 
                 Log.d("Sherpa", result.text)
 
@@ -80,11 +80,11 @@ class VoiceService : Service() {
 
             Log.d(TAG, "Initializing Sherpa")
 
-            sherpaManager.initialize()
+            speechManager.initialize()
 
             Log.d(TAG, "Starting listening")
 
-            sherpaManager.startListening()
+            speechManager.startListening()
 
             Log.d(TAG, "VoiceService started successfully")
 
@@ -103,7 +103,7 @@ class VoiceService : Service() {
         Log.d(TAG, "Stopping VoiceService")
 
         try {
-            sherpaManager.release()
+            speechManager.release()
         } catch (_: Exception) {
         }
 
