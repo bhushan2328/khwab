@@ -74,7 +74,7 @@ class WhisperModelLoader(
             encoder = encoder.absolutePath,
             decoder = decoder.absolutePath,
             tokens = tokens.absolutePath,
-            language = "auto",
+            language = "",
             task = "transcribe"
         )
     }
