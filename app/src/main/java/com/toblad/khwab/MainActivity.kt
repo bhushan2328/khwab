@@ -3,7 +3,6 @@ package com.toblad.khwab
 import android.content.Intent
 import android.os.Build
 import android.os.Bundle
-import android.widget.Toast
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
@@ -22,14 +21,17 @@ class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
 
-        // Initialize Logger
         Logger.initialize(applicationContext)
+
         Logger.info(
             LogModule.SYSTEM,
             "Khwab application started"
         )
 
+        enableEdgeToEdge()
+
         val permissionManager = PermissionManager(this)
+
         val permissionLauncher =
             registerForActivityResult(
                 ActivityResultContracts.RequestMultiplePermissions()
@@ -42,28 +44,21 @@ class MainActivity : ComponentActivity() {
                     if (!permissionManager.hasOverlayPermission()) {
                         permissionManager.requestOverlayPermission()
                     } else {
-                        val serviceIntent = Intent(this, VoiceService::class.java)
-
-                        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
-                            startForegroundService(serviceIntent)
-                        } else {
-                            startService(serviceIntent)
-                        }
-
-                        AssistantStateManager.updateState(
-                            AssistantState.RUNNING
-                        )
+                        startAssistant()
                     }
 
                 } else {
+
+                    Logger.error(
+                        LogModule.SYSTEM,
+                        "Required permissions denied"
+                    )
 
                     AssistantStateManager.updateState(
                         AssistantState.ERROR
                     )
                 }
             }
-
-        enableEdgeToEdge()
 
         setContent {
 
@@ -81,13 +76,7 @@ class MainActivity : ComponentActivity() {
 
                     onStopClick = {
 
-                        val serviceIntent = Intent(this, VoiceService::class.java)
-
-                        stopService(serviceIntent)
-
-                        AssistantStateManager.updateState(
-                            AssistantState.STOPPED
-                        )
+                        stopAssistant()
 
                     }
 
@@ -96,7 +85,41 @@ class MainActivity : ComponentActivity() {
             }
 
         }
-
     }
 
+    private fun startAssistant() {
+
+        Logger.info(
+            LogModule.SYSTEM,
+            "Starting VoiceService"
+        )
+
+        val serviceIntent = Intent(this, VoiceService::class.java)
+
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+            startForegroundService(serviceIntent)
+        } else {
+            startService(serviceIntent)
+        }
+
+        AssistantStateManager.updateState(
+            AssistantState.RUNNING
+        )
+    }
+
+    private fun stopAssistant() {
+
+        Logger.info(
+            LogModule.SYSTEM,
+            "Stopping VoiceService"
+        )
+
+        val serviceIntent = Intent(this, VoiceService::class.java)
+
+        stopService(serviceIntent)
+
+        AssistantStateManager.updateState(
+            AssistantState.STOPPED
+        )
+    }
 }

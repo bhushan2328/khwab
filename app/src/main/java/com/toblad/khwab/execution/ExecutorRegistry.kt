@@ -1,24 +1,40 @@
 package com.toblad.khwab.execution
 
 import com.toblad.khwab.execution.executors.OpenAppExecutor
+import com.toblad.khwab.integration.model.execution.ExecutionPlan
 
-/**
- * Maintains the mapping between command types and their executors.
- */
-class ExecutorRegistry {
+class ExecutorRegistry(
+    private val context: android.content.Context
+) {
 
     private val executors: Map<CommandType, BaseExecutor> = mapOf(
-
         CommandType.OPEN_APP to OpenAppExecutor()
-
     )
 
-    /**
-     * Returns the executor for the specified command.
-     */
+    fun execute(plan: ExecutionPlan): Boolean {
+
+        val commandType = when (plan.action.uppercase()) {
+            "OPEN_APP" -> CommandType.OPEN_APP
+            else -> return false
+        }
+
+        val command = AndroidCommand(
+            type = commandType,
+            target = plan.target,
+            parameters = plan.parameters
+        )
+
+        val executor = executors[command.type] ?: return false
+
+        val result = executor.execute(
+            command,
+            ExecutionContext(context)
+        )
+
+        return result.success
+    }
+
     fun getExecutor(command: AndroidCommand): BaseExecutor? {
-
         return executors[command.type]
-
     }
 }
