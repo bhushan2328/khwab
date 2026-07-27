@@ -98,3 +98,34 @@ class ChatViewModel : ViewModel() {
                                     state = MessageState.STREAMING
                                 )
                             } else {
+                                message
+                            }
+
+                        }
+                    )
+
+                }
+
+                delay(120)
+            }
+
+            _uiState.update { state ->
+
+                state.copy(
+                    messages = state.messages.map { message ->
+
+                        if (message.id == replyId) {
+                            message.copy(
+                                state = MessageState.COMPLETE
+                            )
+                        } else {
+                            message
+                        }
+
+                    }
+                )
+
+            }
+        }
+    }
+}
