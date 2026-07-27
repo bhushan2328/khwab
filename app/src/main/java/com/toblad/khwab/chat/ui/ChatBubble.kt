@@ -15,10 +15,10 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.toblad.khwab.chat.model.ChatMessage
+import com.toblad.khwab.chat.model.MessageState
 import com.toblad.khwab.chat.model.Sender
 import com.toblad.khwab.ui.theme.KhwabBlue
 import com.toblad.khwab.ui.theme.KhwabCard
-import com.toblad.khwab.ui.theme.KhwabGray
 import com.toblad.khwab.ui.theme.KhwabWhite
 
 @Composable
@@ -55,7 +55,13 @@ fun ChatBubble(
             ) {
 
                 Text(
-                    text = message.text,
+                    text = buildString {
+                        append(message.text)
+
+                        if (message.state == MessageState.STREAMING) {
+                            append("▌")
+                        }
+                    },
                     color = KhwabWhite,
                     fontSize = 16.sp,
                     fontWeight = FontWeight.Medium
@@ -66,5 +72,4 @@ fun ChatBubble(
         }
 
     }
-
 }

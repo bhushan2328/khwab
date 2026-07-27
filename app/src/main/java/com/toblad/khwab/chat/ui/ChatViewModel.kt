@@ -3,6 +3,7 @@ package com.toblad.khwab.chat.ui
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.toblad.khwab.chat.model.ChatMessage
+import com.toblad.khwab.chat.model.MessageState
 import com.toblad.khwab.chat.model.MessageStatus
 import com.toblad.khwab.chat.model.Sender
 import kotlinx.coroutines.delay
@@ -38,7 +39,7 @@ class ChatViewModel : ViewModel() {
 
         val input = uiState.value.input.trim()
 
-        if (input.isEmpty()) return
+        if (input.isBlank()) return
 
         val userMessage = ChatMessage(
             id = System.currentTimeMillis(),
@@ -57,7 +58,7 @@ class ChatViewModel : ViewModel() {
 
         viewModelScope.launch {
 
-            delay(600)
+            delay(700)
 
             val replyId = System.currentTimeMillis()
 
@@ -68,19 +69,23 @@ class ChatViewModel : ViewModel() {
                         id = replyId,
                         text = "",
                         sender = Sender.KHWAB,
-                        isStreaming = true
+                        state = MessageState.STREAMING
                     )
                 )
             }
 
-            val reply =
-                "Sure! I received \"$input\". This is a streaming response from Khwab."
+            val fullReply =
+                "Sure! I received \"$input\". This response is streaming word by word from Khwab."
 
-            var streamed = ""
+            val words = fullReply.split(" ")
 
-            for (c in reply) {
+            var streamedText = ""
 
-                streamed += c
+            words.forEachIndexed { index, word ->
+
+                streamedText =
+                    if (index == 0) word
+                    else "$streamedText $word"
 
                 _uiState.update { state ->
 
@@ -89,32 +94,7 @@ class ChatViewModel : ViewModel() {
 
                             if (message.id == replyId) {
                                 message.copy(
-                                    text = streamed,
-                                    isStreaming = true
+                                    text = streamedText,
+                                    state = MessageState.STREAMING
                                 )
                             } else {
-                                message
-                            }
-                        }
-                    )
-                }
-
-                delay(20)
-            }
-
-            _uiState.update { state ->
-
-                state.copy(
-                    messages = state.messages.map { message ->
-
-                        if (message.id == replyId) {
-                            message.copy(isStreaming = false)
-                        } else {
-                            message
-                        }
-                    }
-                )
-            }
-        }
-    }
-}

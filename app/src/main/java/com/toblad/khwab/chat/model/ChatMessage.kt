@@ -5,7 +5,8 @@ data class ChatMessage(
     val text: String,
     val sender: Sender,
     val timestamp: Long = System.currentTimeMillis(),
-    val status: MessageStatus = MessageStatus.SENT
+    val status: MessageStatus = MessageStatus.SENT,
+    val state: MessageState = MessageState.COMPLETE
 )
 
 enum class Sender {
@@ -17,4 +18,10 @@ enum class MessageStatus {
     SENDING,
     SENT,
     ERROR
+}
+
+enum class MessageState {
+    STREAMING,
+    COMPLETE,
+    SPEAKING
 }
