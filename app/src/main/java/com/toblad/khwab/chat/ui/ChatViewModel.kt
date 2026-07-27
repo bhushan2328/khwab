@@ -2,6 +2,8 @@ package com.toblad.khwab.chat.ui
 
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
+import com.toblad.khwab.chat.engine.ChatEngine
+import com.toblad.khwab.di.KhwabProvider
 import com.toblad.khwab.chat.model.ChatMessage
 import com.toblad.khwab.chat.model.MessageState
 import com.toblad.khwab.chat.model.MessageStatus
@@ -13,7 +15,9 @@ import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 
-class ChatViewModel : ViewModel() {
+class ChatViewModel(
+    private val chatEngine: ChatEngine = KhwabProvider.chatEngine
+) : ViewModel() {
 
     private val _uiState = MutableStateFlow(
         ChatUiState(
@@ -45,7 +49,8 @@ class ChatViewModel : ViewModel() {
             id = System.currentTimeMillis(),
             text = input,
             sender = Sender.USER,
-            status = MessageStatus.SENT
+            status = MessageStatus.SENT,
+            state = MessageState.COMPLETE
         )
 
         _uiState.update {
@@ -58,73 +63,59 @@ class ChatViewModel : ViewModel() {
 
         viewModelScope.launch {
 
-            delay(700)
+            delay(300)
 
-            val replyId = System.currentTimeMillis()
+            val response = chatEngine.process(input)
 
-            _uiState.update {
-                it.copy(
-                    isTyping = false,
-                    messages = it.messages + ChatMessage(
-                        id = replyId,
-                        text = "",
-                        sender = Sender.KHWAB,
-                        state = MessageState.STREAMING
-                    )
-                )
-            }
-
-            val fullReply =
-                "Sure! I received \"$input\". This response is streaming word by word from Khwab."
-
-            val words = fullReply.split(" ")
-
-            var streamedText = ""
-
-            words.forEachIndexed { index, word ->
-
-                streamedText =
-                    if (index == 0) word
-                    else "$streamedText $word"
-
-                _uiState.update { state ->
-
-                    state.copy(
-                        messages = state.messages.map { message ->
-
-                            if (message.id == replyId) {
-                                message.copy(
-                                    text = streamedText,
-                                    state = MessageState.STREAMING
-                                )
-                            } else {
-                                message
-                            }
-
-                        }
-                    )
-
-                }
-
-                delay(120)
+            val replyText = if (response.success) {
+                response.executionPlan?.response
+                    ?: "Done."
+            } else {
+                response.error?.message
+                    ?: "Something went wrong."
             }
 
             _uiState.update { state ->
 
                 state.copy(
-                    messages = state.messages.map { message ->
+                    isTyping = false,
+                    messages = state.messages + ChatMessage(
+                        id = System.currentTimeMillis(),
+                        text = replyText,
+                        sender = Sender.KHWAB,
+                        status = MessageStatus.SENT,
+                        state = MessageState.COMPLETE
+                    )
+                )
+            }
 
-                        if (message.id == replyId) {
-                            message.copy(
-                                state = MessageState.COMPLETE
-                            )
-                        } else {
-                            message
+            if (response.success) {
+
+                response.executionPlan?.let { plan ->
+
+                    when (plan.action) {
+
+                        "CHAT_REPLY" -> {
+                            // Conversation only.
                         }
 
-                    }
-                )
+                        "OPEN_APP" -> {
+                            // TODO: Launch app.
+                        }
 
+                        "SET_ALARM" -> {
+                            // TODO: Set alarm.
+                        }
+
+                        "OPEN_SETTINGS" -> {
+                            // TODO: Open Android settings.
+                        }
+
+                        else -> {
+                            // TODO: Handle future actions.
+                        }
+                    }
+                }
             }
         }
     }
