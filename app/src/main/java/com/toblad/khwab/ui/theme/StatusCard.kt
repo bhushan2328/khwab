@@ -27,43 +27,37 @@ import androidx.compose.ui.unit.sp
 fun StatusCard(
     status: String,
     statusColor: Color,
-    message: String = "Tap the microphone and start speaking."
+    message: String
 ) {
 
     Card(
         modifier = Modifier.fillMaxWidth(),
-        shape = RoundedCornerShape(20.dp),
+        shape = RoundedCornerShape(24.dp),
         colors = CardDefaults.cardColors(
             containerColor = KhwabCard
         ),
         elevation = CardDefaults.cardElevation(
-            defaultElevation = 8.dp
+            defaultElevation = 6.dp
         )
     ) {
 
         Column(
             modifier = Modifier
                 .fillMaxWidth()
-                .padding(24.dp),
+                .padding(
+                    horizontal = 24.dp,
+                    vertical = 28.dp
+                ),
             horizontalAlignment = Alignment.CenterHorizontally,
             verticalArrangement = Arrangement.Center
         ) {
 
-            Text(
-                text = "VOICE STATUS",
-                color = KhwabWhite,
-                fontSize = 20.sp,
-                fontWeight = FontWeight.Bold
-            )
-
-            Spacer(modifier = Modifier.height(24.dp))
-
             Box(
                 modifier = Modifier
-                    .size(18.dp)
+                    .size(16.dp)
                     .background(
-                        color = statusColor,
-                        shape = CircleShape
+                        statusColor,
+                        CircleShape
                     )
             )
 
@@ -72,7 +66,7 @@ fun StatusCard(
             Text(
                 text = status.replace("_", " "),
                 color = statusColor,
-                fontSize = 22.sp,
+                fontSize = 24.sp,
                 fontWeight = FontWeight.Bold
             )
 
@@ -80,14 +74,11 @@ fun StatusCard(
 
             Text(
                 text = message,
-                color = KhwabGray,
-                fontSize = 16.sp,
+                color = KhwabWhite,
+                fontSize = 18.sp,
                 textAlign = TextAlign.Center,
-                lineHeight = 22.sp
+                lineHeight = 28.sp
             )
-
         }
-
     }
-
 }

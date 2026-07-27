@@ -4,6 +4,7 @@ import android.app.Service
 import android.content.Intent
 import android.os.IBinder
 import android.util.Log
+import android.widget.Toast
 import com.toblad.khwab.executor.AndroidExecutionEngine
 import com.toblad.khwab.integration.api.KhwabIntegrationProvider
 import com.toblad.khwab.integration.api.request.IntegrationRequest
@@ -91,6 +92,13 @@ class VoiceService : Service() {
         } catch (e: Exception) {
 
             Log.e(TAG, "Failed to start VoiceService", e)
+            e.printStackTrace()
+
+            Toast.makeText(
+                this,
+                "VoiceService Error:\n${e.javaClass.simpleName}\n${e.message}",
+                Toast.LENGTH_LONG
+            ).show()
 
             stopSelf()
         }
@@ -104,12 +112,14 @@ class VoiceService : Service() {
 
         try {
             speechManager.release()
-        } catch (_: Exception) {
+        } catch (e: Exception) {
+            Log.e(TAG, "Failed to release SpeechManager", e)
         }
 
         try {
             floatingWindow.hide()
-        } catch (_: Exception) {
+        } catch (e: Exception) {
+            Log.e(TAG, "Failed to hide FloatingWindow", e)
         }
 
         stopForeground(STOP_FOREGROUND_REMOVE)

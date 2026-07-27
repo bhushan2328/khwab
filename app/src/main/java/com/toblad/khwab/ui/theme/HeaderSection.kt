@@ -62,12 +62,22 @@ fun HeaderSection() {
         verticalAlignment = Alignment.Top
     ) {
 
-        Text(
-            text = "$greeting, Mr. Bhushan",
-            color = KhwabWhite,
-            fontSize = 24.sp,
-            fontWeight = FontWeight.Bold
-        )
+        Column {
+
+            Text(
+                text = greeting,
+                color = KhwabWhite,
+                fontSize = 28.sp,
+                fontWeight = FontWeight.Bold
+            )
+
+            Text(
+                text = "Mr. Bhushan",
+                color = KhwabGray,
+                fontSize = 18.sp,
+                fontWeight = FontWeight.Medium
+            )
+        }
 
         Column(
             horizontalAlignment = Alignment.End
@@ -75,18 +85,17 @@ fun HeaderSection() {
 
             Text(
                 text = date,
-                color = KhwabWhite,
-                fontSize = 14.sp
+                color = KhwabGray,
+                fontSize = 15.sp,
+                fontWeight = FontWeight.Medium
             )
 
             Text(
                 text = time,
                 color = KhwabWhite,
-                fontSize = 18.sp,
-                fontWeight = FontWeight.SemiBold
+                fontSize = 22.sp,
+                fontWeight = FontWeight.Bold
             )
-
         }
-
     }
 }

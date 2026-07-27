@@ -11,6 +11,7 @@ import com.toblad.khwab.logging.LogModule
 import com.toblad.khwab.logging.Logger
 import com.toblad.khwab.permission.PermissionManager
 import com.toblad.khwab.service.VoiceService
+import com.toblad.khwab.speech.ModelInitializer
 import com.toblad.khwab.state.AssistantState
 import com.toblad.khwab.state.AssistantStateManager
 import com.toblad.khwab.ui.theme.HomeScreen
@@ -27,6 +28,9 @@ class MainActivity : ComponentActivity() {
             LogModule.SYSTEM,
             "Khwab application started"
         )
+
+        // Prepare Whisper models once when the app starts
+        ModelInitializer.prepare(applicationContext)
 
         enableEdgeToEdge()
 

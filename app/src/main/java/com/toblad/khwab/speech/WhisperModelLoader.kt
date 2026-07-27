@@ -8,7 +8,7 @@ data class WhisperModel(
     val encoder: String,
     val decoder: String,
     val tokens: String,
-    val language: String = "auto",
+    val language: String = "",
     val task: String = "transcribe"
 )
 
@@ -18,8 +18,6 @@ class WhisperModelLoader(
 
     companion object {
         private const val TAG = "WhisperModelLoader"
-
-        private const val ASSET_DIR = "models/whisper-small"
         private const val OUTPUT_DIR = "whisper-small"
     }
 
@@ -27,30 +25,8 @@ class WhisperModelLoader(
 
         val outputDir = File(context.filesDir, OUTPUT_DIR)
 
-        if (!outputDir.exists()) {
-            outputDir.mkdirs()
-        }
-
-        val assetManager = context.assets
-
-        val files = assetManager.list(ASSET_DIR)
-            ?: throw IllegalStateException("Whisper assets not found.")
-
-        files.forEach { fileName ->
-
-            val outFile = File(outputDir, fileName)
-
-            if (!outFile.exists()) {
-
-                assetManager.open("$ASSET_DIR/$fileName").use { input ->
-
-                    outFile.outputStream().use { output ->
-                        input.copyTo(output)
-                    }
-                }
-
-                Log.d(TAG, "Copied: $fileName")
-            }
+        require(outputDir.exists()) {
+            "Whisper model directory does not exist. Run ModelInitializer.prepare() first."
         }
 
         fun requireFile(name: String): File {
@@ -68,7 +44,7 @@ class WhisperModelLoader(
         val decoder = requireFile("decoder.int8.onnx")
         val tokens = requireFile("tokens.txt")
 
-        Log.d(TAG, "Whisper Small INT8 prepared successfully.")
+        Log.d(TAG, "Using existing Whisper model files.")
 
         return WhisperModel(
             encoder = encoder.absolutePath,

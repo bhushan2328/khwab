@@ -7,6 +7,7 @@ android {
     lint {
         disable += "MissingPermission"
     }
+
     namespace = "com.toblad.khwab"
     compileSdk = 36
 
@@ -47,7 +48,10 @@ dependencies {
     implementation(libs.androidx.activity.compose)
     implementation(libs.androidx.compose.material3)
 
-    // Navigation Compose
+    // Material Icons (Mic, Chat, StopCircle, etc.)
+    implementation("androidx.compose.material:material-icons-extended")
+
+    // Navigation
     implementation(libs.androidx.navigation.compose)
 
     implementation(libs.androidx.compose.ui)
@@ -56,6 +60,8 @@ dependencies {
 
     implementation(libs.androidx.core.ktx)
     implementation(libs.androidx.lifecycle.runtime.ktx)
+
+    implementation(files("libs/sherpa-onnx-1.13.3.aar"))
 
     testImplementation(libs.junit)
 
@@ -66,6 +72,4 @@ dependencies {
 
     debugImplementation(libs.androidx.compose.ui.test.manifest)
     debugImplementation(libs.androidx.compose.ui.tooling)
-
-    implementation(files("libs/sherpa-onnx-1.13.3.aar"))
 }
