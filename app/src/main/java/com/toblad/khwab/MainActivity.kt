@@ -7,6 +7,7 @@ import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
 import androidx.activity.result.contract.ActivityResultContracts
+import com.toblad.khwab.chat.ChatActivity
 import com.toblad.khwab.logging.LogModule
 import com.toblad.khwab.logging.Logger
 import com.toblad.khwab.permission.PermissionManager
@@ -81,6 +82,17 @@ class MainActivity : ComponentActivity() {
                     onStopClick = {
 
                         stopAssistant()
+
+                    },
+
+                    onChatClick = {
+
+                        startActivity(
+                            Intent(
+                                this@MainActivity,
+                                ChatActivity::class.java
+                            )
+                        )
 
                     }
 
