@@ -1,0 +1,60 @@
+package com.toblad.khwab.ui.theme
+
+import androidx.compose.ui.graphics.Brush
+import androidx.compose.ui.graphics.Color
+
+/**
+ * Represents a complete visual palette used by the Khwab Theme Engine.
+ *
+ * Every screen should obtain its colors from this palette instead of
+ * using hardcoded colors directly.
+ */
+data class ThemePalette(
+
+    /* Background */
+
+    val background: Color,
+    val backgroundGradient: Brush,
+
+    /* Surface */
+
+    val surface: Color,
+    val card: Color,
+    val border: Color,
+    val shadow: Color,
+
+    /* Primary */
+
+    val primary: Color,
+    val secondary: Color,
+    val accent: Color,
+
+    /* Text */
+
+    val textPrimary: Color,
+    val textSecondary: Color,
+    val textHint: Color,
+
+    /* Status */
+
+    val success: Color,
+    val warning: Color,
+    val error: Color,
+    val info: Color,
+
+    /* Effects */
+
+    val glow: Color,
+    val overlay: Color,
+
+    /* Microphone */
+
+    val microphone: Color,
+    val microphoneGlow: Color,
+
+    /* Buttons */
+
+    val buttonPrimary: Color,
+    val buttonSecondary: Color,
+    val buttonDanger: Color
+)
