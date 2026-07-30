@@ -34,3 +34,6 @@ project(":core").projectDir = file("../khwab-core/core")
 
 
 project(":integration").projectDir = file("../khwab-integration/integration")
+
+include(":aura")
+project(":aura").projectDir = file("../khwab-aura/aura")
