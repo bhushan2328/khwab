@@ -9,17 +9,31 @@ class ExecutorRegistry(
 ) {
 
     private val executors: List<AndroidExecutor> = listOf(
+
+        // Aura Commands
+        AuraExecutor(),
+
+        // Android Commands
         AppExecutor(context)
+
     )
 
-    fun execute(plan: ExecutionPlan): Boolean {
+    fun execute(
+        plan: ExecutionPlan
+    ): Boolean {
 
-        val executor = executors.firstOrNull {
-            it.supports(plan.action)
-        }
+        val executor =
+            executors.firstOrNull {
+                it.supports(plan.action)
+            }
 
         if (executor == null) {
-            Log.w("ExecutorRegistry", "No executor found for ${plan.action}")
+
+            Log.w(
+                "ExecutorRegistry",
+                "No executor found for ${plan.action}"
+            )
+
             return false
         }
 
