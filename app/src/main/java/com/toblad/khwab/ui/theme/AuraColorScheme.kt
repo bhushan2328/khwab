@@ -1,39 +1,29 @@
 package com.toblad.khwab.ui.theme
 
 import androidx.compose.material3.darkColorScheme
+import androidx.compose.ui.graphics.Color
 
-/**
- * Color scheme used when Aura is active.
- *
- * Currently this mirrors the default Khwab theme.
- *
- * Later these colors will be generated dynamically
- * by AuraEngine based on:
- *
- * • Time of day
- * • Weather
- * • Environment
- * • Lighting
- * • User preferences
- */
 val AuraColorScheme = darkColorScheme(
+    primary = Color(0xFFB39DFF),
+    onPrimary = Color(0xFF1B103F),
 
-    // Primary Colors
-    primary = KhwabBlue,
-    secondary = KhwabGreen,
-    tertiary = KhwabRed,
+    secondary = Color(0xFF66E0FF),
+    onSecondary = Color(0xFF003544),
 
-    // Backgrounds
-    background = KhwabBackground,
-    surface = KhwabSurface,
-    surfaceVariant = KhwabCard,
+    tertiary = Color(0xFFFFB1C8),
+    onTertiary = Color(0xFF5C0024),
 
-    // Text
-    onPrimary = KhwabWhite,
-    onSecondary = KhwabWhite,
-    onTertiary = KhwabWhite,
+    background = Color(0xFF0B1020),
+    onBackground = Color(0xFFE7E0FF),
 
-    onBackground = KhwabWhite,
-    onSurface = KhwabWhite,
-    onSurfaceVariant = KhwabWhite
+    surface = Color(0xFF151A30),
+    onSurface = Color(0xFFE7E0FF),
+
+    surfaceVariant = Color(0xFF252B47),
+    onSurfaceVariant = Color(0xFFCAC4E8),
+
+    outline = Color(0xFF908AB0),
+
+    error = Color(0xFFFFB4AB),
+    onError = Color(0xFF690005)
 )

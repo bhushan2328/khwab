@@ -4,6 +4,7 @@ import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
@@ -23,7 +24,6 @@ import java.util.Locale
 
 @Composable
 fun HeaderSection() {
-
     var currentTime by remember {
         mutableStateOf(Date())
     }
@@ -34,6 +34,8 @@ fun HeaderSection() {
             delay(1000)
         }
     }
+
+    val colors = MaterialTheme.colorScheme
 
     val calendar = Calendar.getInstance().apply {
         time = currentTime
@@ -61,19 +63,17 @@ fun HeaderSection() {
         horizontalArrangement = Arrangement.SpaceBetween,
         verticalAlignment = Alignment.Top
     ) {
-
         Column {
-
             Text(
                 text = greeting,
-                color = KhwabWhite,
+                color = colors.onBackground,
                 fontSize = 28.sp,
                 fontWeight = FontWeight.Bold
             )
 
             Text(
                 text = "Mr. Bhushan",
-                color = KhwabGray,
+                color = colors.onSurfaceVariant,
                 fontSize = 18.sp,
                 fontWeight = FontWeight.Medium
             )
@@ -82,17 +82,16 @@ fun HeaderSection() {
         Column(
             horizontalAlignment = Alignment.End
         ) {
-
             Text(
                 text = date,
-                color = KhwabGray,
+                color = colors.onSurfaceVariant,
                 fontSize = 15.sp,
                 fontWeight = FontWeight.Medium
             )
 
             Text(
                 text = time,
-                color = KhwabWhite,
+                color = colors.onBackground,
                 fontSize = 22.sp,
                 fontWeight = FontWeight.Bold
             )

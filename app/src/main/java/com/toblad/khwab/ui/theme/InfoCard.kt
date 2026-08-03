@@ -7,6 +7,7 @@ import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
+import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Modifier
@@ -18,18 +19,18 @@ import androidx.compose.ui.unit.sp
 fun InfoCard(
     onChatClick: () -> Unit = {}
 ) {
+    val colors = MaterialTheme.colorScheme
 
     Card(
         modifier = Modifier.fillMaxWidth(),
         shape = RoundedCornerShape(20.dp),
         colors = CardDefaults.cardColors(
-            containerColor = KhwabCard
+            containerColor = colors.surfaceVariant
         ),
         elevation = CardDefaults.cardElevation(
             defaultElevation = 8.dp
         )
     ) {
-
         Button(
             onClick = onChatClick,
             modifier = Modifier
@@ -37,19 +38,15 @@ fun InfoCard(
                 .height(60.dp),
             shape = RoundedCornerShape(18.dp),
             colors = ButtonDefaults.buttonColors(
-                containerColor = KhwabBlue,
-                contentColor = KhwabWhite
+                containerColor = colors.primary,
+                contentColor = colors.onPrimary
             )
         ) {
-
             Text(
                 text = "CHAT WITH KHWAB",
                 fontSize = 18.sp,
                 fontWeight = FontWeight.Bold
             )
-
         }
-
     }
-
 }
