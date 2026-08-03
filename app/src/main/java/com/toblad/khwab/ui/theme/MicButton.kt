@@ -11,6 +11,7 @@ import androidx.compose.material.icons.filled.Mic
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.Icon
+import androidx.compose.material3.MaterialTheme
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -23,6 +24,7 @@ fun MicButton(
     modifier: Modifier = Modifier,
     onClick: () -> Unit
 ) {
+    val colors = MaterialTheme.colorScheme
 
     Card(
         modifier = modifier
@@ -30,13 +32,12 @@ fun MicButton(
             .clickable(onClick = onClick),
         shape = CircleShape,
         colors = CardDefaults.cardColors(
-            containerColor = KhwabBlue
+            containerColor = colors.primary
         ),
         elevation = CardDefaults.cardElevation(
             defaultElevation = 18.dp
         )
     ) {
-
         Box(
             modifier = Modifier
                 .fillMaxSize()
@@ -44,23 +45,20 @@ fun MicButton(
                 .background(
                     Brush.radialGradient(
                         colors = listOf(
-                            KhwabListening,
-                            KhwabBlue,
-                            KhwabBackground
+                            colors.tertiary,
+                            colors.primary,
+                            colors.background
                         )
                     )
                 ),
             contentAlignment = Alignment.Center
         ) {
-
             Icon(
                 imageVector = Icons.Default.Mic,
                 contentDescription = "Microphone",
-                tint = KhwabWhite,
+                tint = colors.onPrimary,
                 modifier = Modifier.size(72.dp)
             )
-
         }
-
     }
 }

@@ -7,13 +7,14 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
-import androidx.compose.foundation.layout.padding
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Chat
 import androidx.compose.material.icons.filled.Mic
 import androidx.compose.material.icons.filled.StopCircle
+import androidx.compose.material3.MaterialTheme
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -27,26 +28,25 @@ fun HomeScreen(
     onStopClick: () -> Unit = {},
     onChatClick: () -> Unit = {}
 ) {
-
+    val colors = MaterialTheme.colorScheme
     val assistantState = AssistantStateManager.state
 
     val statusColor = when (assistantState) {
-        AssistantState.STOPPED -> KhwabRed
-        AssistantState.READY -> KhwabBlue
-        AssistantState.RUNNING -> KhwabGreen
-        AssistantState.LISTENING -> KhwabBlue
-        AssistantState.THINKING -> KhwabYellow
-        AssistantState.EXECUTING -> KhwabGreen
-        AssistantState.SPEAKING -> KhwabBlue
-        AssistantState.ERROR -> KhwabRed
+        AssistantState.STOPPED -> colors.error
+        AssistantState.READY -> colors.primary
+        AssistantState.RUNNING -> colors.secondary
+        AssistantState.LISTENING -> colors.primary
+        AssistantState.THINKING -> colors.tertiary
+        AssistantState.EXECUTING -> colors.secondary
+        AssistantState.SPEAKING -> colors.primary
+        AssistantState.ERROR -> colors.error
     }
 
     Box(
         modifier = Modifier
             .fillMaxSize()
-            .background(KhwabBackground)
+            .background(colors.background)
     ) {
-
         Column(
             modifier = Modifier
                 .fillMaxSize()
@@ -55,16 +55,13 @@ fun HomeScreen(
             horizontalAlignment = Alignment.CenterHorizontally,
             verticalArrangement = Arrangement.Top
         ) {
-
             Spacer(modifier = Modifier.height(16.dp))
 
             HeaderSection()
 
             Spacer(modifier = Modifier.height(40.dp))
 
-            MicButton(
-                onClick = {}
-            )
+            MicButton(onClick = {})
 
             Spacer(modifier = Modifier.height(36.dp))
 
@@ -79,7 +76,7 @@ fun HomeScreen(
             ActionButton(
                 text = "Start Assistant",
                 icon = Icons.Default.Mic,
-                backgroundColor = KhwabGreen,
+                backgroundColor = colors.secondary,
                 onClick = onStartClick
             )
 
@@ -88,7 +85,7 @@ fun HomeScreen(
             ActionButton(
                 text = "Stop Assistant",
                 icon = Icons.Default.StopCircle,
-                backgroundColor = KhwabRed,
+                backgroundColor = colors.error,
                 onClick = onStopClick
             )
 
@@ -97,7 +94,7 @@ fun HomeScreen(
             ActionButton(
                 text = "Chat With Khwab",
                 icon = Icons.Default.Chat,
-                backgroundColor = KhwabBlue,
+                backgroundColor = colors.primary,
                 onClick = onChatClick
             )
 
