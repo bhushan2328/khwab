@@ -18,13 +18,19 @@ import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 
 class ChatViewModel(
-    application: Application,
-    private val chatEngine: ChatEngine = KhwabProvider.chatEngine
+    application: Application
 ) : AndroidViewModel(application) {
+
+    // Initialize dependencies inside the ViewModel instead of constructor
+    private val chatEngine: ChatEngine = KhwabProvider.chatEngine
 
     private val executionEngine = AndroidExecutionEngine(
         application.applicationContext
     )
+
+    init {
+        android.util.Log.d("ChatViewModel", "ChatViewModel created successfully")
+    }
 
     private val _uiState = MutableStateFlow(
         ChatUiState(
