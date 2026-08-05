@@ -17,9 +17,6 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
-import com.toblad.khwab.ui.theme.KhwabBlue
-import com.toblad.khwab.ui.theme.KhwabGray
-import com.toblad.khwab.ui.theme.KhwabWhite
 
 @Composable
 fun ChatInputBar(
@@ -28,6 +25,8 @@ fun ChatInputBar(
     onSendClick: () -> Unit,
     onMicClick: () -> Unit
 ) {
+    val colors = MaterialTheme.colorScheme
+
     Row(
         modifier = Modifier
             .fillMaxWidth()
@@ -45,11 +44,11 @@ fun ChatInputBar(
             maxLines = 5,
             shape = RoundedCornerShape(24.dp),
             colors = OutlinedTextFieldDefaults.colors(
-                focusedBorderColor = KhwabBlue,
-                unfocusedBorderColor = KhwabGray,
-                focusedTextColor = KhwabWhite,
-                unfocusedTextColor = KhwabWhite,
-                cursorColor = KhwabBlue
+                focusedBorderColor = colors.primary,
+                unfocusedBorderColor = colors.outline,
+                focusedTextColor = colors.onSurface,
+                unfocusedTextColor = colors.onSurface,
+                cursorColor = colors.primary
             ),
             textStyle = MaterialTheme.typography.bodyLarge
         )
@@ -60,7 +59,7 @@ fun ChatInputBar(
             Icon(
                 imageVector = Icons.Default.Mic,
                 contentDescription = "Voice",
-                tint = KhwabBlue
+                tint = colors.primary
             )
         }
 
@@ -70,7 +69,7 @@ fun ChatInputBar(
             Icon(
                 imageVector = Icons.Default.Send,
                 contentDescription = "Send",
-                tint = KhwabBlue
+                tint = colors.primary
             )
         }
     }

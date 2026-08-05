@@ -5,6 +5,7 @@ import com.toblad.khwab.aura.manager.AuraManager
 import com.toblad.khwab.aura.model.AuraConfig
 import com.toblad.khwab.aura.model.AuraState
 import com.toblad.khwab.aura.model.AuraTheme
+import com.toblad.khwab.aura.model.WeatherState
 import com.toblad.khwab.ui.theme.ThemeController
 
 /**
@@ -20,6 +21,7 @@ object AuraBridge {
     fun activate() {
         aura.activate()
         ThemeController.enableAura()
+        pushTheme()
     }
 
     fun deactivate() {
@@ -49,9 +51,29 @@ object AuraBridge {
 
     fun updateConfig(config: AuraConfig) {
         aura.updateConfig(config)
+        pushTheme()
+    }
+
+    /**
+     * Supplies Aura with fresh, real-world weather (fetched
+     * from the device's actual location) so the next
+     * generated theme reflects real conditions.
+     */
+    fun updateWeather(weather: WeatherState) {
+        aura.updateWeather(weather)
+        pushTheme()
     }
 
     fun refresh() {
         aura.refresh()
+        pushTheme()
+    }
+
+    /**
+     * Pushes the latest Aura profile into the UI theme layer
+     * so any active screen recomposes with real conditions.
+     */
+    private fun pushTheme() {
+        ThemeController.updateAuraProfile(aura.getTheme().profile)
     }
 }

@@ -8,6 +8,7 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
+import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Modifier
@@ -17,14 +18,13 @@ import androidx.compose.ui.unit.sp
 import com.toblad.khwab.chat.model.ChatMessage
 import com.toblad.khwab.chat.model.MessageState
 import com.toblad.khwab.chat.model.Sender
-import com.toblad.khwab.ui.theme.KhwabBlue
-import com.toblad.khwab.ui.theme.KhwabCard
-import com.toblad.khwab.ui.theme.KhwabWhite
 
 @Composable
 fun ChatBubble(
     message: ChatMessage
 ) {
+
+    val colors = MaterialTheme.colorScheme
 
     val isUser = message.sender == Sender.USER
 
@@ -43,7 +43,7 @@ fun ChatBubble(
             modifier = Modifier.fillMaxWidth(0.80f),
             shape = RoundedCornerShape(20.dp),
             colors = CardDefaults.cardColors(
-                containerColor = if (isUser) KhwabBlue else KhwabCard
+                containerColor = if (isUser) colors.primary else colors.surfaceVariant
             )
         ) {
 
@@ -62,7 +62,7 @@ fun ChatBubble(
                             append("▌")
                         }
                     },
-                    color = KhwabWhite,
+                    color = if (isUser) colors.onPrimary else colors.onSurfaceVariant,
                     fontSize = 16.sp,
                     fontWeight = FontWeight.Medium
                 )

@@ -17,13 +17,14 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import com.toblad.khwab.ui.theme.KhwabWhite
 
 @Composable
 fun ChatTopBar(
     onBackClick: () -> Unit = {},
     onMenuClick: () -> Unit = {}
 ) {
+    val colors = MaterialTheme.colorScheme
+
     Row(
         modifier = Modifier
             .fillMaxWidth()
@@ -42,13 +43,13 @@ fun ChatTopBar(
                 Icon(
                     imageVector = Icons.Default.ArrowBack,
                     contentDescription = "Back",
-                    tint = KhwabWhite
+                    tint = colors.onBackground
                 )
             }
 
             Text(
                 text = "KHWAB",
-                color = KhwabWhite,
+                color = colors.onBackground,
                 fontSize = 22.sp,
                 fontWeight = FontWeight.Bold,
                 style = MaterialTheme.typography.titleLarge
@@ -61,7 +62,7 @@ fun ChatTopBar(
             Icon(
                 imageVector = Icons.Default.MoreVert,
                 contentDescription = "Menu",
-                tint = KhwabWhite
+                tint = colors.onBackground
             )
         }
     }

@@ -27,19 +27,9 @@ fun KhwabTheme(
     content: @Composable () -> Unit
 ) {
     val colors = when (ThemeController.currentTheme) {
-        ThemeMode.AURA -> AuraColorScheme
+        ThemeMode.AURA -> ThemeController.currentAuraColors
         ThemeMode.DEFAULT -> KhwabColorScheme
     }
-
-    val colors =
-        when (ThemeController.currentTheme) {
-
-            ThemeMode.AURA ->
-                AuraColorScheme
-
-            ThemeMode.DEFAULT ->
-                KhwabColorScheme
-        }
 
     MaterialTheme(
         colorScheme = colors,

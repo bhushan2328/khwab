@@ -11,7 +11,7 @@ class ExecutorRegistry(
     private val executors: List<AndroidExecutor> = listOf(
 
         // Aura Commands
-        AuraExecutor(),
+        AuraExecutor(context),
 
         // Android Commands
         AppExecutor(context)

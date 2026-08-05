@@ -11,18 +11,18 @@ import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
-import com.toblad.khwab.ui.theme.KhwabGray
-import com.toblad.khwab.ui.theme.KhwabWhite
 
 @Composable
 fun TypingIndicator() {
+    val colors = MaterialTheme.colorScheme
+
     Card(
         modifier = Modifier
             .wrapContentWidth()
             .padding(horizontal = 12.dp, vertical = 8.dp),
         shape = RoundedCornerShape(18.dp),
         colors = CardDefaults.cardColors(
-            containerColor = KhwabGray
+            containerColor = colors.surfaceVariant
         )
     ) {
         Row(
@@ -33,7 +33,7 @@ fun TypingIndicator() {
         ) {
             Text(
                 text = "Khwab is thinking...",
-                color = KhwabWhite,
+                color = colors.onSurfaceVariant,
                 style = MaterialTheme.typography.bodyMedium
             )
         }

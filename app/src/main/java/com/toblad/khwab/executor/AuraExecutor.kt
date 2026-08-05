@@ -1,16 +1,28 @@
 package com.toblad.khwab.executor
 
+import android.content.Context
 import android.util.Log
-import com.toblad.khwab.aura.manager.AuraManager
+import com.toblad.khwab.aura.AuraBridge
+import com.toblad.khwab.environment.AuraEnvironmentSync
 import com.toblad.khwab.integration.model.execution.ExecutionPlan
-import com.toblad.khwab.ui.theme.ThemeController
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.launch
 
 /**
  * Executes Aura related commands.
+ *
+ * Always goes through [AuraBridge] — the single shared Aura
+ * instance — so that environment updates (real weather) and
+ * UI theme updates stay in sync with each other.
  */
-class AuraExecutor : AndroidExecutor {
+class AuraExecutor(
+    context: Context
+) : AndroidExecutor {
 
-    private val auraManager = AuraManager()
+    private val environmentSync = AuraEnvironmentSync(context)
+
+    private val scope = CoroutineScope(Dispatchers.Main)
 
     override fun supports(action: String): Boolean {
 
@@ -34,9 +46,14 @@ class AuraExecutor : AndroidExecutor {
 
                 "ACTIVATE_AURA" -> {
 
-                    auraManager.activate()
+                    AuraBridge.activate()
 
-                    ThemeController.enableAura()
+                    // Pull in real location + live weather so
+                    // the theme reflects actual conditions.
+                    // Real time is already handled inside Aura.
+                    scope.launch {
+                        environmentSync.sync()
+                    }
 
                     Log.d(
                         "AuraExecutor",
@@ -48,9 +65,7 @@ class AuraExecutor : AndroidExecutor {
 
                 "DEACTIVATE_AURA" -> {
 
-                    auraManager.deactivate()
-
-                    ThemeController.disableAura()
+                    AuraBridge.deactivate()
 
                     Log.d(
                         "AuraExecutor",

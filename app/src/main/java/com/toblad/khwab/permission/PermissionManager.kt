@@ -27,7 +27,11 @@ class PermissionManager(
     fun requiredPermissions(): Array<String> {
 
         val permissions = mutableListOf(
-            Manifest.permission.RECORD_AUDIO
+            Manifest.permission.RECORD_AUDIO,
+
+            // Needed so Khwab Aura can tint the theme using
+            // the device's actual location + live weather.
+            Manifest.permission.ACCESS_COARSE_LOCATION
         )
 
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {

@@ -21,14 +21,14 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
-import com.toblad.khwab.ui.theme.KhwabBackground
-import com.toblad.khwab.ui.theme.KhwabWhite
 
 @Composable
 fun ChatScreen(
     onBackClick: () -> Unit = {},
     viewModel: ChatViewModel = viewModel()
 ) {
+
+    val colors = MaterialTheme.colorScheme
 
     val uiState by viewModel.uiState.collectAsStateWithLifecycle()
 
@@ -44,7 +44,7 @@ fun ChatScreen(
     }
 
     Scaffold(
-        containerColor = KhwabBackground,
+        containerColor = colors.background,
         topBar = {
             ChatTopBar(
                 onBackClick = onBackClick
@@ -73,7 +73,7 @@ fun ChatScreen(
                 modifier = Modifier
                     .fillMaxWidth()
                     .padding(top = 12.dp),
-                color = KhwabWhite,
+                color = colors.onBackground,
                 fontSize = 14.sp,
                 fontWeight = FontWeight.SemiBold,
                 style = MaterialTheme.typography.bodyMedium
