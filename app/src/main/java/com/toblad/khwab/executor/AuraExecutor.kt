@@ -44,7 +44,7 @@ class AuraExecutor(
 
                 "PREVIEW_AURA_WEATHER" -> {
 
-                    val weather = parseWeather(plan.target)
+                    val weather = parseWeather(plan.target ?: "")
 
                     if (weather == null) {
 

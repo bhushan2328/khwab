@@ -2,7 +2,6 @@ package com.toblad.khwab.aura
 
 import android.content.Context
 import android.media.MediaPlayer
-import com.toblad.khwab.R
 import com.toblad.khwab.aura.model.TimePhase
 import com.toblad.khwab.aura.model.WeatherState
 import com.toblad.khwab.aura.ui.LightningBus
@@ -18,13 +17,12 @@ import kotlinx.coroutines.launch
  * to the exact same LightningBus events that drive the
  * visual lightning flash in WeatherLayer.
  *
- * Reacts instantly to AuraBridge.snapshotFlow instead of
- * polling — no timer, no wasted wakeups.
+ * Audio files are loaded dynamically by name from res/raw/
+ * so missing files are skipped silently — no compile errors.
  *
- * Expects these raw resources in app/src/main/res/raw/:
+ * Expected files in app/src/main/res/raw/ (add when ready):
  * rain_loop, storm_loop, thunder_hit, wind_loop,
- * snow_ambience, night_crickets, day_birds. Any missing file
- * is skipped silently rather than crashing.
+ * snow_ambience, night_crickets, day_birds
  *
  * Started/stopped by AuraBridge — not called directly.
  */
@@ -42,8 +40,8 @@ class AmbientSoundController(
     private var weatherPlayer: MediaPlayer? = null
     private var timePlayer: MediaPlayer? = null
 
-    private var currentWeatherRes: Int? = null
-    private var currentTimeRes: Int? = null
+    private var currentWeatherRes: String? = null
+    private var currentTimeRes: String? = null
 
     fun start() {
 
@@ -136,21 +134,21 @@ class AmbientSoundController(
         LightningBus.update(stormActive = false, intensity = 0f)
     }
 
-    private fun weatherResFor(weather: WeatherState): Int? = when (weather) {
-        WeatherState.RAIN -> R.raw.rain_loop
-        WeatherState.STORM -> R.raw.storm_loop
-        WeatherState.SNOW -> R.raw.snow_ambience
-        WeatherState.FOG -> R.raw.wind_loop
+    private fun weatherResFor(weather: WeatherState): String? = when (weather) {
+        WeatherState.RAIN -> "rain_loop"
+        WeatherState.STORM -> "storm_loop"
+        WeatherState.SNOW -> "snow_ambience"
+        WeatherState.FOG -> "wind_loop"
         WeatherState.CLOUDY, WeatherState.CLEAR -> null
     }
 
-    private fun timeResFor(phase: TimePhase): Int? = when (phase) {
-        TimePhase.NIGHT, TimePhase.MIDNIGHT -> R.raw.night_crickets
-        TimePhase.MORNING, TimePhase.NOON -> R.raw.day_birds
+    private fun timeResFor(phase: TimePhase): String? = when (phase) {
+        TimePhase.NIGHT, TimePhase.MIDNIGHT -> "night_crickets"
+        TimePhase.MORNING, TimePhase.NOON -> "day_birds"
         else -> null
     }
 
-    private fun switchLoop(isWeather: Boolean, newRes: Int?) {
+    private fun switchLoop(isWeather: Boolean, newRes: String?) {
 
         val oldPlayer = if (isWeather) weatherPlayer else timePlayer
 
@@ -165,9 +163,15 @@ class AmbientSoundController(
         }
     }
 
-    private fun startLoop(resId: Int): MediaPlayer? {
+    private fun rawResId(name: String): Int {
+        return appContext.resources.getIdentifier(name, "raw", appContext.packageName)
+    }
+
+    private fun startLoop(resName: String): MediaPlayer? {
 
         return try {
+            val resId = rawResId(resName)
+            if (resId == 0) return null  // file not added yet — skip silently
             MediaPlayer.create(appContext, resId)?.apply {
                 isLooping = true
                 setVolume(0f, 0f)
@@ -182,7 +186,9 @@ class AmbientSoundController(
     private fun playThunderHit() {
 
         try {
-            MediaPlayer.create(appContext, R.raw.thunder_hit)?.apply {
+            val resId = rawResId("thunder_hit")
+            if (resId == 0) return  // file not added yet — skip silently
+            MediaPlayer.create(appContext, resId)?.apply {
                 setOnCompletionListener { it.release() }
                 start()
             }
