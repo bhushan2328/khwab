@@ -11,10 +11,16 @@ import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
+import com.toblad.khwab.ui.theme.ThemeController
+import com.toblad.khwab.ui.theme.ThemeMode
 
 @Composable
 fun TypingIndicator() {
     val colors = MaterialTheme.colorScheme
+    val auraActive = ThemeController.currentTheme == ThemeMode.AURA
+
+    val containerColor = if (auraActive) colors.surfaceVariant.copy(alpha = 0.72f)
+                         else colors.surfaceVariant
 
     Card(
         modifier = Modifier
@@ -22,7 +28,7 @@ fun TypingIndicator() {
             .padding(horizontal = 12.dp, vertical = 8.dp),
         shape = RoundedCornerShape(18.dp),
         colors = CardDefaults.cardColors(
-            containerColor = colors.surfaceVariant
+            containerColor = containerColor
         )
     ) {
         Row(

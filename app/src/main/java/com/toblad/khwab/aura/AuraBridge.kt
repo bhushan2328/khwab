@@ -206,7 +206,7 @@ object AuraBridge {
      * (ambient sound, future observers).
      */
     private fun pushTheme() {
-        ThemeController.updateAuraProfile(aura.getTheme().profile)
+        ThemeController.updateAuraTheme(aura.getTheme())
         _snapshotFlow.value = AuraSnapshot(aura.getTheme(), aura.getConfig())
     }
 }

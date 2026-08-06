@@ -1,5 +1,6 @@
 package com.toblad.khwab.chat.ui
 
+import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxWidth
@@ -10,13 +11,16 @@ import androidx.compose.material.icons.filled.Mic
 import androidx.compose.material.icons.filled.Send
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
+import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.OutlinedTextFieldDefaults
 import androidx.compose.material3.Text
-import androidx.compose.material3.MaterialTheme
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
+import com.toblad.khwab.ui.theme.AuraIconProvider
+import com.toblad.khwab.ui.theme.ThemeController
+import com.toblad.khwab.ui.theme.ThemeMode
 
 @Composable
 fun ChatInputBar(
@@ -27,9 +31,23 @@ fun ChatInputBar(
 ) {
     val colors = MaterialTheme.colorScheme
 
+    val auraActive = ThemeController.currentTheme == ThemeMode.AURA
+    val auraTheme = ThemeController.currentAuraTheme
+
+    // Mic icon follows Aura weather/time when active
+    val micIcon = AuraIconProvider.micIconFor(
+        weather = auraTheme.weatherState,
+        timePhase = auraTheme.timePhase
+    )
+
+    // Semi-transparent background behind the input bar so the Aura scene shows through
+    val rowBg = if (auraActive) colors.surface.copy(alpha = 0.70f)
+                else colors.surface
+
     Row(
         modifier = Modifier
             .fillMaxWidth()
+            .background(rowBg)
             .padding(12.dp),
         horizontalArrangement = Arrangement.spacedBy(8.dp)
     ) {
@@ -53,19 +71,15 @@ fun ChatInputBar(
             textStyle = MaterialTheme.typography.bodyLarge
         )
 
-        IconButton(
-            onClick = onMicClick
-        ) {
+        IconButton(onClick = onMicClick) {
             Icon(
-                imageVector = Icons.Default.Mic,
+                imageVector = if (auraActive) micIcon else Icons.Default.Mic,
                 contentDescription = "Voice",
                 tint = colors.primary
             )
         }
 
-        IconButton(
-            onClick = onSendClick
-        ) {
+        IconButton(onClick = onSendClick) {
             Icon(
                 imageVector = Icons.Default.Send,
                 contentDescription = "Send",

@@ -26,6 +26,18 @@ fun MicButton(
 ) {
     val colors = MaterialTheme.colorScheme
 
+    // When Aura is active, use the live weather/time to pick the icon and gradient
+    val auraTheme = ThemeController.currentAuraTheme
+    val auraActive = ThemeController.currentTheme == ThemeMode.AURA
+
+    val icon = AuraIconProvider.micIconFor(
+        weather = auraTheme.weatherState,
+        timePhase = auraTheme.timePhase
+    )
+
+    // Gradient layers: tertiary → primary → background (default)
+    // In Aura mode the color scheme already reflects real sky/weather,
+    // so the gradient automatically shifts with conditions.
     Card(
         modifier = modifier
             .size(160.dp)
@@ -54,7 +66,7 @@ fun MicButton(
             contentAlignment = Alignment.Center
         ) {
             Icon(
-                imageVector = Icons.Default.Mic,
+                imageVector = if (auraActive) icon else Icons.Default.Mic,
                 contentDescription = "Microphone",
                 tint = colors.onPrimary,
                 modifier = Modifier.size(72.dp)

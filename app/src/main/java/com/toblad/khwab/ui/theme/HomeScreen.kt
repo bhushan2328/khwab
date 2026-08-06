@@ -10,16 +10,12 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
-import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.Chat
-import androidx.compose.material.icons.filled.Mic
-import androidx.compose.material.icons.filled.Settings
-import androidx.compose.material.icons.filled.StopCircle
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
+import com.toblad.khwab.aura.ui.AuraScene
 import com.toblad.khwab.state.AssistantState
 import com.toblad.khwab.state.AssistantStateManager
 
@@ -32,6 +28,15 @@ fun HomeScreen(
 ) {
     val colors = MaterialTheme.colorScheme
     val assistantState = AssistantStateManager.state
+
+    // Aura-driven dynamic icons — update with every weather/time change
+    val auraTheme = ThemeController.currentAuraTheme
+    val auraActive = ThemeController.currentTheme == ThemeMode.AURA
+    val icons = AuraIconProvider.homeIcons(
+        auraActive = auraActive,
+        weather = auraTheme.weatherState,
+        timePhase = auraTheme.timePhase
+    )
 
     val statusColor = when (assistantState) {
         AssistantState.STOPPED -> colors.error
@@ -49,6 +54,14 @@ fun HomeScreen(
             .fillMaxSize()
             .background(colors.background)
     ) {
+        // Aura scene renders as the full-screen background when active
+        if (auraActive) {
+            AuraScene(
+                theme = auraTheme,
+                modifier = Modifier.fillMaxSize()
+            )
+        }
+
         Column(
             modifier = Modifier
                 .fillMaxSize()
@@ -78,7 +91,7 @@ fun HomeScreen(
 
             ActionButton(
                 text = "Start Assistant",
-                icon = Icons.Default.Mic,
+                icon = icons.start,
                 backgroundColor = colors.secondary,
                 onClick = onStartClick
             )
@@ -87,7 +100,7 @@ fun HomeScreen(
 
             ActionButton(
                 text = "Stop Assistant",
-                icon = Icons.Default.StopCircle,
+                icon = icons.stop,
                 backgroundColor = colors.error,
                 onClick = onStopClick
             )
@@ -96,7 +109,7 @@ fun HomeScreen(
 
             ActionButton(
                 text = "Chat With Khwab",
-                icon = Icons.Default.Chat,
+                icon = icons.chat,
                 backgroundColor = colors.primary,
                 onClick = onChatClick
             )
@@ -105,7 +118,7 @@ fun HomeScreen(
 
             ActionButton(
                 text = "Aura Settings",
-                icon = Icons.Default.Settings,
+                icon = icons.settings,
                 backgroundColor = colors.tertiary,
                 onClick = onSettingsClick
             )

@@ -20,6 +20,14 @@ object ThemeController {
     var currentAuraColors by mutableStateOf(auraColorScheme(AuraTheme().profile))
         private set
 
+    /**
+     * Live Aura theme snapshot (weather, time phase, sun/moon).
+     * Updated every time AuraBridge pushes a new theme so that
+     * any composable reading this state recomposes automatically.
+     */
+    var currentAuraTheme by mutableStateOf(AuraTheme())
+        private set
+
     fun setTheme(theme: ThemeMode) {
         currentTheme = theme
     }
@@ -39,6 +47,16 @@ object ThemeController {
 
     fun disableAura() {
         currentTheme = ThemeMode.DEFAULT
+    }
+
+    /**
+     * Recomputes the live Aura color scheme and stores the
+     * latest theme snapshot from a fresh [AuraTheme] reflecting
+     * real sky/weather/light conditions.
+     */
+    fun updateAuraTheme(theme: AuraTheme) {
+        currentAuraTheme = theme
+        currentAuraColors = auraColorScheme(theme.profile)
     }
 
     /**
