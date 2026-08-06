@@ -13,6 +13,7 @@ import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Chat
 import androidx.compose.material.icons.filled.Mic
+import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material.icons.filled.StopCircle
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.runtime.Composable
@@ -26,7 +27,8 @@ import com.toblad.khwab.state.AssistantStateManager
 fun HomeScreen(
     onStartClick: () -> Unit = {},
     onStopClick: () -> Unit = {},
-    onChatClick: () -> Unit = {}
+    onChatClick: () -> Unit = {},
+    onSettingsClick: () -> Unit = {}
 ) {
     val colors = MaterialTheme.colorScheme
     val assistantState = AssistantStateManager.state
@@ -55,6 +57,7 @@ fun HomeScreen(
             horizontalAlignment = Alignment.CenterHorizontally,
             verticalArrangement = Arrangement.Top
         ) {
+
             Spacer(modifier = Modifier.height(16.dp))
 
             HeaderSection()
@@ -96,6 +99,15 @@ fun HomeScreen(
                 icon = Icons.Default.Chat,
                 backgroundColor = colors.primary,
                 onClick = onChatClick
+            )
+
+            Spacer(modifier = Modifier.height(16.dp))
+
+            ActionButton(
+                text = "Aura Settings",
+                icon = Icons.Default.Settings,
+                backgroundColor = colors.tertiary,
+                onClick = onSettingsClick
             )
 
             Spacer(modifier = Modifier.height(32.dp))

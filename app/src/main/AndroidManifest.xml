@@ -31,6 +31,11 @@
             android:windowSoftInputMode="adjustResize" />
 
         <activity
+            android:name=".settings.SettingsActivity"
+            android:exported="false"
+            android:theme="@style/Theme.Khwab" />
+
+        <activity
             android:name=".MainActivity"
             android:exported="true"
             android:label="@string/app_name"

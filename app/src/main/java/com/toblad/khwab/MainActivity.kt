@@ -7,11 +7,13 @@ import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
 import androidx.activity.result.contract.ActivityResultContracts
+import com.toblad.khwab.aura.AuraBridge
 import com.toblad.khwab.chat.ChatActivity
 import com.toblad.khwab.logging.LogModule
 import com.toblad.khwab.logging.Logger
 import com.toblad.khwab.permission.PermissionManager
 import com.toblad.khwab.service.VoiceService
+import com.toblad.khwab.settings.SettingsActivity
 import com.toblad.khwab.speech.ModelInitializer
 import com.toblad.khwab.state.AssistantState
 import com.toblad.khwab.state.AssistantStateManager
@@ -29,6 +31,11 @@ class MainActivity : ComponentActivity() {
             LogModule.SYSTEM,
             "Khwab application started"
         )
+
+        // Restore any saved Aura preferences (enabled state,
+        // follow-time, follow-weather, animations, ambient
+        // sound, refresh interval) before Aura is used anywhere.
+        AuraBridge.initialize(applicationContext)
 
         // Prepare Whisper models once when the app starts
         ModelInitializer.prepare(applicationContext)
@@ -91,6 +98,17 @@ class MainActivity : ComponentActivity() {
                             Intent(
                                 this@MainActivity,
                                 ChatActivity::class.java
+                            )
+                        )
+
+                    },
+
+                    onSettingsClick = {
+
+                        startActivity(
+                            Intent(
+                                this@MainActivity,
+                                SettingsActivity::class.java
                             )
                         )
 

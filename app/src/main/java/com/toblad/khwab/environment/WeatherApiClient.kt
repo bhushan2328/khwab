@@ -16,20 +16,32 @@ import java.util.Locale
 class WeatherApiClient {
 
     /**
+     * A single live weather reading: the mapped Aura state
+     * plus the raw wind speed / precipitation used to gauge
+     * real-world severity.
+     */
+    data class WeatherReading(
+        val state: WeatherState,
+        val windSpeedKmh: Double,
+        val precipitationMm: Double
+    )
+
+    /**
      * Fetches the current weather for the given coordinates
-     * and maps it to an Aura [WeatherState].
+     * and maps it to an Aura [WeatherState], along with wind
+     * speed and precipitation for severity scoring.
      *
      * Returns null if the request fails for any reason (no
      * network, timeout, malformed response, etc).
      */
-    fun fetchWeather(latitude: Double, longitude: Double): WeatherState? {
+    fun fetchWeather(latitude: Double, longitude: Double): WeatherReading? {
 
         return try {
 
             val url = URL(
                 String.format(
                     Locale.US,
-                    "https://api.open-meteo.com/v1/forecast?latitude=%.4f&longitude=%.4f&current=weather_code&timezone=auto",
+                    "https://api.open-meteo.com/v1/forecast?latitude=%.4f&longitude=%.4f&current=weather_code,wind_speed_10m,precipitation&timezone=auto",
                     latitude,
                     longitude
                 )
@@ -54,11 +66,17 @@ class WeatherApiClient {
 
             connection.disconnect()
 
-            val weatherCode = JSONObject(body)
-                .getJSONObject("current")
-                .getInt("weather_code")
+            val current = JSONObject(body).getJSONObject("current")
 
-            mapWeatherCode(weatherCode)
+            val weatherCode = current.getInt("weather_code")
+            val windSpeed = current.optDouble("wind_speed_10m", 0.0)
+            val precipitation = current.optDouble("precipitation", 0.0)
+
+            WeatherReading(
+                state = mapWeatherCode(weatherCode),
+                windSpeedKmh = windSpeed,
+                precipitationMm = precipitation
+            )
 
         } catch (e: Exception) {
             null
