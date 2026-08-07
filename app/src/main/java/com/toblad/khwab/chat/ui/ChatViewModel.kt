@@ -3,11 +3,15 @@ package com.toblad.khwab.chat.ui
 import android.app.Application
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
+import com.toblad.khwab.background.KnowledgeAcquisitionState
+import com.toblad.khwab.background.KnowledgeAcquisitionWorker
 import com.toblad.khwab.chat.engine.ChatEngine
 import com.toblad.khwab.chat.model.ChatMessage
 import com.toblad.khwab.chat.model.MessageState
 import com.toblad.khwab.chat.model.MessageStatus
 import com.toblad.khwab.chat.model.Sender
+import com.toblad.khwab.db.KhwabDatabase
+import com.toblad.khwab.db.repository.RoomTemporaryKnowledgeRepository
 import com.toblad.khwab.di.KhwabProvider
 import com.toblad.khwab.executor.AndroidExecutionEngine
 import kotlinx.coroutines.delay
@@ -22,21 +26,20 @@ class ChatViewModel(
     application: Application
 ) : AndroidViewModel(application) {
 
-    // Monotonically increasing counter — avoids duplicate IDs from
-    // System.currentTimeMillis() on fast devices.
     private val idCounter = AtomicLong(System.currentTimeMillis())
     private fun nextId() = idCounter.incrementAndGet()
 
-    // Initialize dependencies inside the ViewModel instead of constructor
-    private val chatEngine: ChatEngine = KhwabProvider.chatEngine
-
-    private val executionEngine = AndroidExecutionEngine(
-        application.applicationContext
-    )
+    private val context = application.applicationContext
 
     init {
+        // Ensure KhwabProvider is initialised with context (idempotent)
+        KhwabProvider.init(context)
         android.util.Log.d("ChatViewModel", "ChatViewModel created successfully")
     }
+
+    private val chatEngine: ChatEngine = KhwabProvider.chatEngine
+
+    private val executionEngine = AndroidExecutionEngine(context)
 
     private val _uiState = MutableStateFlow(
         ChatUiState(
@@ -52,15 +55,19 @@ class ChatViewModel(
 
     val uiState: StateFlow<ChatUiState> = _uiState.asStateFlow()
 
+    /** Tracks background knowledge acquisition state for UI indicators. */
+    private val _acquisitionState = MutableStateFlow<KnowledgeAcquisitionState>(
+        KnowledgeAcquisitionState.Idle
+    )
+    val acquisitionState: StateFlow<KnowledgeAcquisitionState> =
+        _acquisitionState.asStateFlow()
+
     fun onInputChanged(text: String) {
-        _uiState.update {
-            it.copy(input = text)
-        }
+        _uiState.update { it.copy(input = text) }
     }
 
     fun sendMessage() {
         val input = uiState.value.input.trim()
-
         if (input.isBlank()) return
 
         val userMessage = ChatMessage(
@@ -104,8 +111,26 @@ class ChatViewModel(
             }
 
             if (response.success) {
+                // Execute Android-side plan (open app, call, etc.)
                 response.executionPlan?.let { plan ->
                     executionEngine.execute(plan)
+                }
+
+                // Schedule background knowledge acquisition if needed
+                if (response.requiresAcquisition) {
+                    val query = response.acquisitionQuery ?: input
+                    _acquisitionState.value = KnowledgeAcquisitionState.Acquiring(query)
+                    KnowledgeAcquisitionWorker.enqueue(context, query)
+                }
+
+                // If user asked to forget learned knowledge, delete from temp store
+                response.forgetLearnedKey?.let { key ->
+                    viewModelScope.launch {
+                        val repo = RoomTemporaryKnowledgeRepository(
+                            KhwabDatabase.getInstance(context).temporaryKnowledgeDao()
+                        )
+                        repo.deleteByKey(key)
+                    }
                 }
             }
         }

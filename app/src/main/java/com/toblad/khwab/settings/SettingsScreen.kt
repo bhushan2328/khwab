@@ -7,16 +7,21 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.ArrowBack
 import androidx.compose.material.icons.filled.Remove
+import androidx.compose.material.icons.filled.Visibility
+import androidx.compose.material.icons.filled.VisibilityOff
+import androidx.compose.material3.Button
 import androidx.compose.material3.Card
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
@@ -28,9 +33,14 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.text.input.KeyboardType
+import androidx.compose.ui.text.input.PasswordVisualTransformation
+import androidx.compose.ui.text.input.VisualTransformation
 import androidx.compose.ui.unit.dp
 import com.toblad.khwab.aura.AuraBridge
 import com.toblad.khwab.aura.model.AuraConfig
+import com.toblad.khwab.di.KhwabProvider
 
 /**
  * Lets the user control Aura's behavior: whether it's on,
@@ -45,7 +55,7 @@ import com.toblad.khwab.aura.model.AuraConfig
 fun SettingsScreen(
     onBackClick: () -> Unit = {}
 ) {
-
+    val context = LocalContext.current
     var config by remember { mutableStateOf(AuraBridge.getConfig()) }
 
     fun applyChange(newConfig: AuraConfig) {
@@ -121,6 +131,14 @@ fun SettingsScreen(
                 minutes = config.refreshIntervalMinutes,
                 onMinutesChange = { applyChange(config.copy(refreshIntervalMinutes = it)) }
             )
+
+            ApiKeyRow(
+                initialKey = KhwabProvider.apiKeyStore.getApiKey().orEmpty(),
+                onSave = { key ->
+                    KhwabProvider.apiKeyStore.saveApiKey(key)
+                    KhwabProvider.reinitialize(context)
+                }
+            )
         }
     }
 }
@@ -180,6 +198,56 @@ private fun RefreshIntervalRow(
 
             IconButton(onClick = { if (minutes < 60) onMinutesChange(minutes + 1) }) {
                 Icon(Icons.Default.Add, contentDescription = "Increase interval")
+            }
+        }
+    }
+}
+
+@Composable
+private fun ApiKeyRow(
+    initialKey: String,
+    onSave: (String) -> Unit
+) {
+    var key by remember { mutableStateOf(initialKey) }
+    var showKey by remember { mutableStateOf(false) }
+
+    Card(modifier = Modifier.fillMaxWidth()) {
+        Column(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(16.dp),
+            verticalArrangement = Arrangement.spacedBy(8.dp)
+        ) {
+            Text(text = "OpenAI API Key", style = MaterialTheme.typography.titleMedium)
+            Text(
+                text = "Required for background knowledge acquisition",
+                style = MaterialTheme.typography.bodySmall
+            )
+            OutlinedTextField(
+                value = key,
+                onValueChange = { key = it },
+                modifier = Modifier.fillMaxWidth(),
+                placeholder = { Text("sk-...") },
+                singleLine = true,
+                visualTransformation = if (showKey)
+                    VisualTransformation.None
+                else
+                    PasswordVisualTransformation(),
+                keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Password),
+                trailingIcon = {
+                    IconButton(onClick = { showKey = !showKey }) {
+                        Icon(
+                            imageVector = if (showKey) Icons.Default.VisibilityOff else Icons.Default.Visibility,
+                            contentDescription = if (showKey) "Hide key" else "Show key"
+                        )
+                    }
+                }
+            )
+            Button(
+                onClick = { onSave(key) },
+                modifier = Modifier.fillMaxWidth()
+            ) {
+                Text("Save API Key")
             }
         }
     }

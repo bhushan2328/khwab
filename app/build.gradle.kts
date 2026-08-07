@@ -1,6 +1,7 @@
 plugins {
     alias(libs.plugins.android.application)
     alias(libs.plugins.kotlin.compose)
+    alias(libs.plugins.ksp)
 }
 
 android {
@@ -41,7 +42,22 @@ android {
 
 dependencies {
 
+    implementation(project(":core"))
     implementation(project(":integration"))
+
+    // Coroutines (Android main-thread dispatcher for VoiceService scope)
+    implementation("org.jetbrains.kotlinx:kotlinx-coroutines-android:1.10.2")
+
+    // Room
+    implementation(libs.androidx.room.runtime)
+    implementation(libs.androidx.room.ktx)
+    ksp(libs.androidx.room.compiler)
+
+    // WorkManager
+    implementation(libs.androidx.work.runtime.ktx)
+
+    // Security (EncryptedSharedPreferences)
+    implementation(libs.androidx.security.crypto)
 
     implementation(platform(libs.androidx.compose.bom))
 

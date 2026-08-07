@@ -24,6 +24,8 @@ class VoiceService : Service() {
     private lateinit var executionEngine: AndroidExecutionEngine
     private lateinit var floatingWindow: FloatingWindow
 
+    private val serviceScope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
+
     private val integration = KhwabIntegrationProvider.create()
 
     override fun onCreate() {
@@ -94,6 +96,28 @@ class VoiceService : Service() {
                     Log.d("Khwab", "Execution Success: $success")
                 }
 
+                // Schedule background knowledge acquisition if needed
+                if (response.requiresAcquisition) {
+                    val query = response.acquisitionQuery ?: result.text
+                    Log.d(TAG, "Scheduling knowledge acquisition for: $query")
+                    KnowledgeAcquisitionWorker.enqueue(this, query)
+                }
+
+                // Delete learned knowledge if user asked to forget it
+                response.forgetLearnedKey?.let { key ->
+                    serviceScope.launch {
+                        try {
+                            val repo = RoomTemporaryKnowledgeRepository(
+                                KhwabDatabase.getInstance(applicationContext).temporaryKnowledgeDao()
+                            )
+                            repo.deleteByKey(key)
+                            Log.d(TAG, "Deleted learned knowledge for key: $key")
+                        } catch (e: Exception) {
+                            Log.e(TAG, "Failed to delete learned knowledge", e)
+                        }
+                    }
+                }
+
                 floatingWindow.setState(AssistantState.LISTENING)
                 AssistantStateManager.updateState(AssistantState.LISTENING)
             }
@@ -142,6 +166,8 @@ class VoiceService : Service() {
         } catch (e: Exception) {
             Log.e(TAG, "Failed to hide FloatingWindow", e)
         }
+
+        serviceScope.cancel()
 
         stopForeground(STOP_FOREGROUND_REMOVE)
 
