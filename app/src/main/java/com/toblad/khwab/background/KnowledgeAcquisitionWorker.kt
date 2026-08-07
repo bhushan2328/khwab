@@ -21,6 +21,7 @@ import com.toblad.khwab.integration.openai.LLMKnowledgeExtractor
 import com.toblad.khwab.integration.openai.OpenRouterClient
 import com.toblad.khwab.integration.openai.OpenRouterConfig
 import com.toblad.khwab.integration.openai.RelatedPromptBuilder
+import com.toblad.khwab.di.KhwabProvider
 import kotlinx.coroutines.async
 import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.withTimeout
@@ -44,21 +45,26 @@ class KnowledgeAcquisitionWorker(
         private const val TAG = "KnowledgeAcquisition"
         const val KEY_QUERY = "query"
         const val KEY_TTL_DAYS = "ttl_days"
-        /** Output key: primary answer text placed in Result.success() outputData. */
         const val KEY_ANSWER = "answer"
+        /** Conversation history stored as a flat string array: [role0, msg0, role1, msg1, …] */
+        private const val KEY_HISTORY = "history"
         private const val TIMEOUT_MS = 60_000L
 
         /**
          * Enqueue a one-time knowledge acquisition job for [query].
          *
-         * Uses [ExistingWorkPolicy.KEEP] so a second request for the same query
-         * is silently dropped if one is already pending or running.
-         *
-         * Returns the [UUID] of the enqueued work request so the caller can
-         * observe [WorkInfo] and retrieve the answer from [KEY_ANSWER].
+         * [history] is the last N conversation turns as (role, text) pairs.
+         * It is serialised into a flat String array for WorkManager input data.
          */
-        fun enqueue(context: Context, query: String, ttlDays: Int = 30): UUID {
+        fun enqueue(
+            context: Context,
+            query: String,
+            ttlDays: Int = 30,
+            history: List<Pair<String, String>> = emptyList()
+        ): UUID {
             val normKey = query.trim().lowercase()
+            // Flatten pairs → ["User","hello","Khwab","hi there",…]
+            val historyFlat = history.flatMap { (role, msg) -> listOf(role, msg) }.toTypedArray()
 
             val request = OneTimeWorkRequestBuilder<KnowledgeAcquisitionWorker>()
                 .setConstraints(
@@ -69,7 +75,8 @@ class KnowledgeAcquisitionWorker(
                 .setInputData(
                     workDataOf(
                         KEY_QUERY to normKey,
-                        KEY_TTL_DAYS to ttlDays
+                        KEY_TTL_DAYS to ttlDays,
+                        KEY_HISTORY to historyFlat
                     )
                 )
                 .build()
@@ -90,12 +97,32 @@ class KnowledgeAcquisitionWorker(
         val query = inputData.getString(KEY_QUERY) ?: return@coroutineScope Result.failure()
         val ttlDays = inputData.getInt(KEY_TTL_DAYS, 30)
 
-        Log.d(TAG, "Starting knowledge acquisition: $query")
+        // Reconstruct conversation history from flat string array
+        val historyFlat = inputData.getStringArray(KEY_HISTORY) ?: emptyArray()
+        val conversationHistory = historyFlat
+            .toList()
+            .chunked(2)
+            .mapNotNull { chunk -> if (chunk.size == 2) chunk[0] to chunk[1] else null }
+
+        Log.d(TAG, "Starting knowledge acquisition: $query (history=${conversationHistory.size} turns)")
 
         val db = KhwabDatabase.getInstance(applicationContext)
-        val geminiClient = GeminiClient(GeminiConfig(apiKey = BuildConfig.GEMINI_API_KEY))
-        val openRouterClient = OpenRouterClient(OpenRouterConfig(apiKey = BuildConfig.OPENROUTER_API_KEY))
-        val client = FallbackLLMClient(primary = geminiClient, fallback = openRouterClient)
+
+        // Reuse the shared FallbackLLMClient from KhwabProvider — avoids creating
+        // duplicate HttpClient thread pools for every worker run (Fix 7).
+        // Falls back to a local instance if provider is not yet initialised.
+        val client: FallbackLLMClient = try {
+            KhwabProvider.init(applicationContext)
+            KhwabProvider.llmClient ?: FallbackLLMClient(
+                primary = GeminiClient(GeminiConfig(apiKey = BuildConfig.GEMINI_API_KEY)),
+                fallback = OpenRouterClient(OpenRouterConfig(apiKey = BuildConfig.OPENROUTER_API_KEY))
+            )
+        } catch (_: Exception) {
+            FallbackLLMClient(
+                primary = GeminiClient(GeminiConfig(apiKey = BuildConfig.GEMINI_API_KEY)),
+                fallback = OpenRouterClient(OpenRouterConfig(apiKey = BuildConfig.OPENROUTER_API_KEY))
+            )
+        }
         val llmService = LLMService(client)
         val promptBuilder = RelatedPromptBuilder()
         val extractor = LLMKnowledgeExtractor()
@@ -112,7 +139,7 @@ class KnowledgeAcquisitionWorker(
             var primaryAnswer: String? = null
 
             withTimeout(TIMEOUT_MS) {
-                val prompts = promptBuilder.buildSet(query, memoryContext)
+                val prompts = promptBuilder.buildSet(query, memoryContext, conversationHistory)
 
                 // Fire the primary prompt first — it's the one shown to the user.
                 // Only burn extra quota on context/related if the primary succeeds,
@@ -163,7 +190,10 @@ class KnowledgeAcquisitionWorker(
             }
         } catch (e: Exception) {
             Log.e(TAG, "Acquisition failed for '$query': ${e.message}")
-            try { client.close() } catch (_: Exception) {}
+            // Only close if it's NOT the shared provider client
+            if (client !== KhwabProvider.llmClient) {
+                try { client.close() } catch (_: Exception) {}
+            }
             if (runAttemptCount < 3) Result.retry() else Result.failure()
         }
     }

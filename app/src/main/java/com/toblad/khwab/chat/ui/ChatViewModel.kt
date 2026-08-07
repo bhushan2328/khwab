@@ -16,6 +16,8 @@ import com.toblad.khwab.core.memory.model.Memory
 import com.toblad.khwab.core.memory.model.MemoryCategory
 import com.toblad.khwab.core.memory.model.MemoryConfidence
 import com.toblad.khwab.db.KhwabDatabase
+import com.toblad.khwab.db.dao.ChatMessageDao
+import com.toblad.khwab.db.entity.ChatMessageEntity
 import com.toblad.khwab.db.repository.RoomPermanentMemory
 import com.toblad.khwab.db.repository.RoomTemporaryKnowledgeRepository
 import com.toblad.khwab.di.KhwabProvider
@@ -46,40 +48,47 @@ class ChatViewModel(
 
     private val chatEngine: ChatEngine = KhwabProvider.chatEngine
     private val executionEngine = AndroidExecutionEngine(context)
+    private val chatMessageDao: ChatMessageDao =
+        KhwabDatabase.getInstance(context).chatMessageDao()
 
-    private val _uiState = MutableStateFlow(
-        ChatUiState(
-            messages = listOf(
-                ChatMessage(
-                    id = nextId(),
-                    text = "Hello Mr. Bhushan! I'm Khwab. How can I help you today?",
-                    sender = Sender.KHWAB
-                )
-            )
-        )
-    )
+    private val _uiState = MutableStateFlow(ChatUiState())
     val uiState: StateFlow<ChatUiState> = _uiState.asStateFlow()
 
-    /** Tracks background knowledge acquisition state for UI indicators. */
+    /** Tracks background knowledge acquisition state for the "Learning…" strip. */
     private val _acquisitionState = MutableStateFlow<KnowledgeAcquisitionState>(
         KnowledgeAcquisitionState.Idle
     )
     val acquisitionState: StateFlow<KnowledgeAcquisitionState> =
         _acquisitionState.asStateFlow()
 
-    /**
-     * The ID of the placeholder "Let me look into that…" bubble that was inserted
-     * when an acquisition was started. When Gemini returns, we replace this bubble
-     * in-place instead of appending a second message.
-     */
+    /** ID of the placeholder bubble inserted when Gemini acquisition starts. */
     private var pendingPlaceholderMessageId: Long? = null
 
     /**
-     * The last answer surfaced to the user (from Gemini acquisition or temp memory recall).
-     * Used so "remember this" can save it permanently regardless of which path answered.
+     * Last answer shown to the user (Gemini or local memory).
+     * Used so "remember this" can save it permanently.
      */
     private var lastAnswerForMemory: String? = null
     private var lastAnswerQuery: String? = null
+
+    init {
+        // Load persisted messages from Room on startup
+        viewModelScope.launch {
+            val saved = chatMessageDao.loadAll().map { it.toChatMessage() }
+            val messages = if (saved.isEmpty()) {
+                listOf(
+                    ChatMessage(
+                        id = nextId(),
+                        text = "Hello Mr. Bhushan! I'm Khwab. How can I help you today?",
+                        sender = Sender.KHWAB
+                    ).also { msg ->
+                        chatMessageDao.upsert(msg.toEntity())
+                    }
+                )
+            } else saved
+            _uiState.update { it.copy(messages = messages) }
+        }
+    }
 
     fun onInputChanged(text: String) {
         _uiState.update { it.copy(input = text) }
@@ -105,12 +114,11 @@ class ChatViewModel(
         )
 
         _uiState.update {
-            it.copy(
-                input = "",
-                isTyping = true,
-                messages = it.messages + userMessage
-            )
+            it.copy(input = "", isTyping = true, messages = it.messages + userMessage)
         }
+
+        // Persist user message immediately
+        viewModelScope.launch { chatMessageDao.upsert(userMessage.toEntity()) }
 
         viewModelScope.launch {
             delay(300)
@@ -124,22 +132,25 @@ class ChatViewModel(
             }
 
             if (response.requiresAcquisition) {
-                // ── Gemini acquisition path ───────────────────────────────────
-                // Insert a placeholder bubble that will be replaced in-place when
-                // Gemini returns the real answer.
+                // ── Gemini path: insert placeholder, keep isTyping = true ─────
                 val placeholderId = nextId()
                 pendingPlaceholderMessageId = placeholderId
 
+                val placeholderMsg = ChatMessage(
+                    id = placeholderId,
+                    text = replyText,   // "Let me look into that…"
+                    sender = Sender.KHWAB,
+                    status = MessageStatus.SENDING,
+                    state = MessageState.STREAMING
+                )
+
+                // Persist placeholder — will be updated when Gemini answers
+                chatMessageDao.upsert(placeholderMsg.toEntity())
+
                 _uiState.update { state ->
                     state.copy(
-                        isTyping = false,
-                        messages = state.messages + ChatMessage(
-                            id = placeholderId,
-                            text = replyText,   // "Let me look into that…"
-                            sender = Sender.KHWAB,
-                            status = MessageStatus.SENDING,   // spinner tint
-                            state = MessageState.STREAMING    // cursor shows
-                        )
+                        isTyping = true,    // keep typing indicator while waiting
+                        messages = state.messages + placeholderMsg
                     )
                 }
 
@@ -147,11 +158,14 @@ class ChatViewModel(
                 lastAnswerForMemory = null
                 lastAnswerQuery = query
                 _acquisitionState.value = KnowledgeAcquisitionState.Acquiring(query)
-                val workId = KnowledgeAcquisitionWorker.enqueue(context, query)
+
+                // Build conversation history to send with the prompt
+                val history = buildConversationHistory()
+                val workId = KnowledgeAcquisitionWorker.enqueue(context, query, history = history)
                 observeAcquisition(workId, query, placeholderId)
 
             } else {
-                // ── Answered locally (memory / conversation / command) ────────
+                // ── Local answer (memory / conversation / command) ────────────
                 val khwabMsg = ChatMessage(
                     id = nextId(),
                     text = replyText,
@@ -159,18 +173,13 @@ class ChatViewModel(
                     status = MessageStatus.SENT,
                     state = MessageState.COMPLETE
                 )
+                chatMessageDao.upsert(khwabMsg.toEntity())
                 _uiState.update { state ->
                     state.copy(isTyping = false, messages = state.messages + khwabMsg)
                 }
 
-                // Track the local answer for "remember this" too
-                // (e.g. Khwab answered from 30-day temp memory — user may want to pin it)
-                if (response.success && !replyText.isNullOrBlank() &&
-                    !replyText.startsWith("I don't have") &&
-                    !replyText.startsWith("I'm not sure") &&
-                    !replyText.startsWith("Could you clarify") &&
-                    !replyText.startsWith("I can't") &&
-                    !replyText.startsWith("I'm unable")) {
+                // Track for "remember this"
+                if (response.success && isAnswerWorthRemembering(replyText)) {
                     lastAnswerForMemory = replyText
                     lastAnswerQuery = input
                 }
@@ -181,10 +190,9 @@ class ChatViewModel(
 
                 response.forgetLearnedKey?.let { key ->
                     viewModelScope.launch {
-                        val repo = RoomTemporaryKnowledgeRepository(
+                        RoomTemporaryKnowledgeRepository(
                             KhwabDatabase.getInstance(context).temporaryKnowledgeDao()
-                        )
-                        repo.deleteByKey(key)
+                        ).deleteByKey(key)
                     }
                 }
             }
@@ -192,11 +200,23 @@ class ChatViewModel(
     }
 
     /**
+     * Builds the last 6 turns as a list of (role, text) pairs for Gemini context.
+     * Uses the current in-memory message list — already up to date.
+     */
+    private fun buildConversationHistory(): List<Pair<String, String>> {
+        return _uiState.value.messages
+            .takeLast(12)   // up to 6 user + 6 khwab turns
+            .filter { it.state == MessageState.COMPLETE }
+            .map { msg ->
+                val role = if (msg.sender == Sender.USER) "User" else "Khwab"
+                role to msg.text
+            }
+    }
+
+    /**
      * Observes a [KnowledgeAcquisitionWorker] job.
-     *
-     * On SUCCEEDED: replaces the [placeholderId] bubble in-place with the real answer.
-     *               No new bubble is appended — the existing one is updated.
-     * On FAILED/CANCELLED: updates the placeholder bubble to show an error message.
+     * On SUCCEEDED — replaces the placeholder bubble in-place, hides typing indicator.
+     * On failure — shows an error message in the placeholder bubble.
      */
     private fun observeAcquisition(workId: UUID, query: String, placeholderId: Long) {
         viewModelScope.launch {
@@ -211,35 +231,41 @@ class ChatViewModel(
 
                             if (!answer.isNullOrBlank()) {
                                 lastAnswerForMemory = answer
-                                // Replace the placeholder bubble in-place
+
+                                // Update Room first, then UI
+                                chatMessageDao.updateContent(
+                                    id = placeholderId,
+                                    text = answer,
+                                    status = "SENT",
+                                    state = "COMPLETE"
+                                )
+
                                 _uiState.update { state ->
                                     state.copy(
+                                        isTyping = false,
                                         messages = state.messages.map { msg ->
-                                            if (msg.id == placeholderId) {
+                                            if (msg.id == placeholderId)
                                                 msg.copy(
                                                     text = answer,
                                                     status = MessageStatus.SENT,
                                                     state = MessageState.COMPLETE
                                                 )
-                                            } else msg
+                                            else msg
                                         }
                                     )
                                 }
                             } else {
-                                // Gemini returned nothing useful — update placeholder to say so
-                                replacePlaceholder(
-                                    placeholderId,
+                                val errorText =
                                     "I couldn't find a good answer for \"$query\". Try rephrasing?"
-                                )
+                                replacePlaceholder(placeholderId, errorText)
                             }
                             pendingPlaceholderMessageId = null
                             _acquisitionState.value = KnowledgeAcquisitionState.Completed(query)
                         }
                         else -> {
-                            replacePlaceholder(
-                                placeholderId,
+                            val errorText =
                                 "Something went wrong while looking up \"$query\". Please try again."
-                            )
+                            replacePlaceholder(placeholderId, errorText)
                             pendingPlaceholderMessageId = null
                             _acquisitionState.value = KnowledgeAcquisitionState.Failed(
                                 query = query,
@@ -251,10 +277,14 @@ class ChatViewModel(
         }
     }
 
-    /** Updates the text and state of a bubble identified by [id]. */
+    /** Updates a bubble in both Room and the in-memory UI state. */
     private fun replacePlaceholder(id: Long, text: String) {
+        viewModelScope.launch {
+            chatMessageDao.updateContent(id, text, "SENT", "COMPLETE")
+        }
         _uiState.update { state ->
             state.copy(
+                isTyping = false,
                 messages = state.messages.map { msg ->
                     if (msg.id == id) msg.copy(
                         text = text,
@@ -278,22 +308,29 @@ class ChatViewModel(
                lower.startsWith("please remember this")
     }
 
+    private fun isAnswerWorthRemembering(text: String): Boolean {
+        val lower = text.lowercase()
+        return !lower.startsWith("i don't have") &&
+               !lower.startsWith("i'm not sure") &&
+               !lower.startsWith("could you clarify") &&
+               !lower.startsWith("i can't") &&
+               !lower.startsWith("i'm unable") &&
+               !lower.startsWith("something went wrong") &&
+               !lower.startsWith("i couldn't find")
+    }
+
     /**
-     * Saves [lastAnswerForMemory] into permanent Room memory.
-     * Works regardless of whether the answer came from Gemini or local temp memory.
-     * The creation timestamp is stored inside Memory.metadata automatically.
-     * When the user later asks "when did I save this?" / "recall X", CoreStepExecutor
-     * surfaces the saved date.
+     * Saves [lastAnswerForMemory] permanently in Room.
+     * Creation timestamp is inside Memory.metadata — surfaced by CoreStepExecutor.RECALL.
      */
     private fun saveLastAnswerPermanently() {
         val answer = lastAnswerForMemory ?: return
         val query = lastAnswerQuery ?: "learned answer"
 
         viewModelScope.launch {
-            val db = KhwabDatabase.getInstance(context)
-            val permanentMemory = RoomPermanentMemory(db.permanentMemoryDao())
-
-            permanentMemory.create(
+            RoomPermanentMemory(
+                KhwabDatabase.getInstance(context).permanentMemoryDao()
+            ).create(
                 Memory.createPermanent(
                     subject = query.trim().lowercase(),
                     value = answer,
@@ -305,19 +342,40 @@ class ChatViewModel(
             lastAnswerForMemory = null
             lastAnswerQuery = null
 
-            val confirmMsg = "🔒 Saved permanently! I'll always remember this answer about \"$query\".\n" +
-                             "   Say **\"recall $query\"** anytime to get it back, or ask me when you saved it."
+            val confirmMsg =
+                "🔒 Saved permanently! I'll always remember this answer about \"$query\".\n" +
+                "   Say **\"recall $query\"** anytime to get it back."
+            val msg = ChatMessage(
+                id = nextId(),
+                text = confirmMsg,
+                sender = Sender.KHWAB,
+                status = MessageStatus.SENT,
+                state = MessageState.COMPLETE
+            )
+            chatMessageDao.upsert(msg.toEntity())
             _uiState.update { state ->
-                state.copy(
-                    messages = state.messages + ChatMessage(
-                        id = nextId(),
-                        text = confirmMsg,
-                        sender = Sender.KHWAB,
-                        status = MessageStatus.SENT,
-                        state = MessageState.COMPLETE
-                    )
-                )
+                state.copy(messages = state.messages + msg)
             }
         }
     }
+
+    // ── Entity mapping helpers ────────────────────────────────────────────────
+
+    private fun ChatMessage.toEntity() = ChatMessageEntity(
+        id = id,
+        text = text,
+        sender = sender.name,
+        timestamp = timestamp,
+        status = status.name,
+        state = state.name
+    )
+
+    private fun ChatMessageEntity.toChatMessage() = ChatMessage(
+        id = id,
+        text = text,
+        sender = Sender.valueOf(sender),
+        timestamp = timestamp,
+        status = MessageStatus.valueOf(status),
+        state = MessageState.valueOf(state)
+    )
 }

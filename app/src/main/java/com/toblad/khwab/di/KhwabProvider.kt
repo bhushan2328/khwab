@@ -30,6 +30,11 @@ object KhwabProvider {
     @Volatile
     private var _integration: KhwabIntegration? = null
 
+    /** Shared LLM client — reused by KnowledgeAcquisitionWorker to avoid duplicate HttpClients. */
+    @Volatile
+    var llmClient: FallbackLLMClient? = null
+        private set
+
     fun init(context: Context) {
         if (_chatEngine != null) return
         synchronized(this) {
@@ -41,14 +46,15 @@ object KhwabProvider {
             val permanentMemory = RoomPermanentMemory(db.permanentMemoryDao())
             val temporaryKnowledge = RoomTemporaryKnowledgeRepository(db.temporaryKnowledgeDao())
 
-            val geminiClient = GeminiClient(GeminiConfig(apiKey = BuildConfig.GEMINI_API_KEY))
-            val openRouterClient = OpenRouterClient(OpenRouterConfig(apiKey = BuildConfig.OPENROUTER_API_KEY))
-            val llmClient = FallbackLLMClient(primary = geminiClient, fallback = openRouterClient)
+            val client = FallbackLLMClient(
+                primary = GeminiClient(GeminiConfig(apiKey = BuildConfig.GEMINI_API_KEY)),
+                fallback = OpenRouterClient(OpenRouterConfig(apiKey = BuildConfig.OPENROUTER_API_KEY))
+            ).also { llmClient = it }
 
             val bridge = DefaultCoreBridge(
                 permanentMemory = permanentMemory,
                 temporaryKnowledge = temporaryKnowledge,
-                llmClient = llmClient
+                llmClient = client
             )
 
             val integration = DefaultKhwabIntegration(bridge)
