@@ -28,20 +28,20 @@ object ModelDownloadManager {
 
     /**
      * Individual file download URLs.
-     * Source: https://github.com/k2-fsa/sherpa-onnx/releases/tag/asr-models
+     * Hosted on: https://github.com/bhushan2328/khwab/releases/tag/v1.0-models
      */
     private val MODEL_FILES = listOf(
         ModelFile(
             name = "encoder.int8.onnx",
-            url  = "https://github.com/k2-fsa/sherpa-onnx/releases/download/asr-models/sherpa-onnx-whisper-small.int8-encoder.onnx"
+            url  = "https://github.com/bhushan2328/khwab/releases/download/v1.0-models/encoder.int8.onnx"
         ),
         ModelFile(
             name = "decoder.int8.onnx",
-            url  = "https://github.com/k2-fsa/sherpa-onnx/releases/download/asr-models/sherpa-onnx-whisper-small.int8-decoder.onnx"
+            url  = "https://github.com/bhushan2328/khwab/releases/download/v1.0-models/decoder.int8.onnx"
         ),
         ModelFile(
             name = "tokens.txt",
-            url  = "https://github.com/k2-fsa/sherpa-onnx/releases/download/asr-models/sherpa-onnx-whisper-small-tokens.txt"
+            url  = "https://github.com/bhushan2328/khwab/releases/download/v1.0-models/tokens.txt"
         )
     )
 
