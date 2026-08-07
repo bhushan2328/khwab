@@ -12,9 +12,9 @@ import com.toblad.khwab.chat.model.ChatMessage
 import com.toblad.khwab.chat.model.MessageState
 import com.toblad.khwab.chat.model.MessageStatus
 import com.toblad.khwab.chat.model.Sender
+import com.toblad.khwab.core.memory.model.Memory
 import com.toblad.khwab.core.memory.model.MemoryCategory
 import com.toblad.khwab.core.memory.model.MemoryConfidence
-import com.toblad.khwab.core.memory.model.Memory
 import com.toblad.khwab.db.KhwabDatabase
 import com.toblad.khwab.db.repository.RoomPermanentMemory
 import com.toblad.khwab.db.repository.RoomTemporaryKnowledgeRepository
@@ -40,13 +40,11 @@ class ChatViewModel(
     private val context = application.applicationContext
 
     init {
-        // Ensure KhwabProvider is initialised with context (idempotent)
         KhwabProvider.init(context)
         android.util.Log.d("ChatViewModel", "ChatViewModel created successfully")
     }
 
     private val chatEngine: ChatEngine = KhwabProvider.chatEngine
-
     private val executionEngine = AndroidExecutionEngine(context)
 
     private val _uiState = MutableStateFlow(
@@ -60,7 +58,6 @@ class ChatViewModel(
             )
         )
     )
-
     val uiState: StateFlow<ChatUiState> = _uiState.asStateFlow()
 
     /** Tracks background knowledge acquisition state for UI indicators. */
@@ -71,11 +68,18 @@ class ChatViewModel(
         _acquisitionState.asStateFlow()
 
     /**
-     * Holds the last AI-fetched answer so "remember this" can save it permanently.
-     * Cleared whenever a new acquisition starts.
+     * The ID of the placeholder "Let me look into that…" bubble that was inserted
+     * when an acquisition was started. When Gemini returns, we replace this bubble
+     * in-place instead of appending a second message.
      */
-    private var lastAcquisitionAnswer: String? = null
-    private var lastAcquisitionQuery: String? = null
+    private var pendingPlaceholderMessageId: Long? = null
+
+    /**
+     * The last answer surfaced to the user (from Gemini acquisition or temp memory recall).
+     * Used so "remember this" can save it permanently regardless of which path answered.
+     */
+    private var lastAnswerForMemory: String? = null
+    private var lastAnswerQuery: String? = null
 
     fun onInputChanged(text: String) {
         _uiState.update { it.copy(input = text) }
@@ -85,8 +89,8 @@ class ChatViewModel(
         val input = uiState.value.input.trim()
         if (input.isBlank()) return
 
-        // Short-circuit: "remember this" on last AI answer → save permanently
-        if (isRememberThisCommand(input) && lastAcquisitionAnswer != null) {
+        // Short-circuit: "remember this" saves the last answer permanently
+        if (isRememberThisCommand(input) && lastAnswerForMemory != null) {
             _uiState.update { it.copy(input = "") }
             saveLastAnswerPermanently()
             return
@@ -119,36 +123,62 @@ class ChatViewModel(
                 response.error?.message ?: "Something went wrong."
             }
 
-            _uiState.update { state ->
-                state.copy(
-                    isTyping = false,
-                    messages = state.messages + ChatMessage(
-                        id = nextId(),
-                        text = replyText,
-                        sender = Sender.KHWAB,
-                        status = MessageStatus.SENT,
-                        state = MessageState.COMPLETE
+            if (response.requiresAcquisition) {
+                // ── Gemini acquisition path ───────────────────────────────────
+                // Insert a placeholder bubble that will be replaced in-place when
+                // Gemini returns the real answer.
+                val placeholderId = nextId()
+                pendingPlaceholderMessageId = placeholderId
+
+                _uiState.update { state ->
+                    state.copy(
+                        isTyping = false,
+                        messages = state.messages + ChatMessage(
+                            id = placeholderId,
+                            text = replyText,   // "Let me look into that…"
+                            sender = Sender.KHWAB,
+                            status = MessageStatus.SENDING,   // spinner tint
+                            state = MessageState.STREAMING    // cursor shows
+                        )
                     )
+                }
+
+                val query = response.acquisitionQuery ?: input
+                lastAnswerForMemory = null
+                lastAnswerQuery = query
+                _acquisitionState.value = KnowledgeAcquisitionState.Acquiring(query)
+                val workId = KnowledgeAcquisitionWorker.enqueue(context, query)
+                observeAcquisition(workId, query, placeholderId)
+
+            } else {
+                // ── Answered locally (memory / conversation / command) ────────
+                val khwabMsg = ChatMessage(
+                    id = nextId(),
+                    text = replyText,
+                    sender = Sender.KHWAB,
+                    status = MessageStatus.SENT,
+                    state = MessageState.COMPLETE
                 )
+                _uiState.update { state ->
+                    state.copy(isTyping = false, messages = state.messages + khwabMsg)
+                }
+
+                // Track the local answer for "remember this" too
+                // (e.g. Khwab answered from 30-day temp memory — user may want to pin it)
+                if (response.success && !replyText.isNullOrBlank() &&
+                    !replyText.startsWith("I don't have") &&
+                    !replyText.startsWith("I'm not sure") &&
+                    !replyText.startsWith("Could you clarify") &&
+                    !replyText.startsWith("I can't") &&
+                    !replyText.startsWith("I'm unable")) {
+                    lastAnswerForMemory = replyText
+                    lastAnswerQuery = input
+                }
             }
 
             if (response.success) {
-                // Execute Android-side plan (open app, call, etc.)
-                response.executionPlan?.let { plan ->
-                    executionEngine.execute(plan)
-                }
+                response.executionPlan?.let { plan -> executionEngine.execute(plan) }
 
-                // Schedule background knowledge acquisition if needed
-                if (response.requiresAcquisition) {
-                    val query = response.acquisitionQuery ?: input
-                    lastAcquisitionAnswer = null
-                    lastAcquisitionQuery = query
-                    _acquisitionState.value = KnowledgeAcquisitionState.Acquiring(query)
-                    val workId = KnowledgeAcquisitionWorker.enqueue(context, query)
-                    observeAcquisition(workId, query)
-                }
-
-                // If user asked to forget learned knowledge, delete from temp store
                 response.forgetLearnedKey?.let { key ->
                     viewModelScope.launch {
                         val repo = RoomTemporaryKnowledgeRepository(
@@ -162,41 +192,55 @@ class ChatViewModel(
     }
 
     /**
-     * Observes a [KnowledgeAcquisitionWorker] job by its [workId].
+     * Observes a [KnowledgeAcquisitionWorker] job.
      *
-     * On SUCCEEDED → stores the answer in [lastAcquisitionAnswer] and posts it
-     * as a Khwab message so the user can reply "remember this" to save it permanently.
+     * On SUCCEEDED: replaces the [placeholderId] bubble in-place with the real answer.
+     *               No new bubble is appended — the existing one is updated.
+     * On FAILED/CANCELLED: updates the placeholder bubble to show an error message.
      */
-    private fun observeAcquisition(workId: UUID, query: String) {
+    private fun observeAcquisition(workId: UUID, query: String, placeholderId: Long) {
         viewModelScope.launch {
             WorkManager.getInstance(context)
                 .getWorkInfoByIdFlow(workId)
-                .first { info ->
-                    info != null && info.state.isFinished
-                }
+                .first { info -> info != null && info.state.isFinished }
                 ?.let { info ->
                     when (info.state) {
                         WorkInfo.State.SUCCEEDED -> {
                             val answer = info.outputData
                                 .getString(KnowledgeAcquisitionWorker.KEY_ANSWER)
+
                             if (!answer.isNullOrBlank()) {
-                                lastAcquisitionAnswer = answer
+                                lastAnswerForMemory = answer
+                                // Replace the placeholder bubble in-place
                                 _uiState.update { state ->
                                     state.copy(
-                                        messages = state.messages + ChatMessage(
-                                            id = nextId(),
-                                            text = answer,
-                                            sender = Sender.KHWAB,
-                                            status = MessageStatus.SENT,
-                                            state = MessageState.COMPLETE
-                                        )
+                                        messages = state.messages.map { msg ->
+                                            if (msg.id == placeholderId) {
+                                                msg.copy(
+                                                    text = answer,
+                                                    status = MessageStatus.SENT,
+                                                    state = MessageState.COMPLETE
+                                                )
+                                            } else msg
+                                        }
                                     )
                                 }
+                            } else {
+                                // Gemini returned nothing useful — update placeholder to say so
+                                replacePlaceholder(
+                                    placeholderId,
+                                    "I couldn't find a good answer for \"$query\". Try rephrasing?"
+                                )
                             }
-                            _acquisitionState.value =
-                                KnowledgeAcquisitionState.Completed(query)
+                            pendingPlaceholderMessageId = null
+                            _acquisitionState.value = KnowledgeAcquisitionState.Completed(query)
                         }
                         else -> {
+                            replacePlaceholder(
+                                placeholderId,
+                                "Something went wrong while looking up \"$query\". Please try again."
+                            )
+                            pendingPlaceholderMessageId = null
                             _acquisitionState.value = KnowledgeAcquisitionState.Failed(
                                 query = query,
                                 reason = "Knowledge acquisition did not complete."
@@ -207,12 +251,23 @@ class ChatViewModel(
         }
     }
 
+    /** Updates the text and state of a bubble identified by [id]. */
+    private fun replacePlaceholder(id: Long, text: String) {
+        _uiState.update { state ->
+            state.copy(
+                messages = state.messages.map { msg ->
+                    if (msg.id == id) msg.copy(
+                        text = text,
+                        status = MessageStatus.SENT,
+                        state = MessageState.COMPLETE
+                    ) else msg
+                }
+            )
+        }
+    }
+
     // ── "Remember this" helpers ───────────────────────────────────────────────
 
-    /**
-     * Returns true if [input] is a "remember this" intent referring to the last
-     * AI-fetched answer.
-     */
     private fun isRememberThisCommand(input: String): Boolean {
         val lower = input.trim().lowercase()
         return lower == "remember this" ||
@@ -224,37 +279,36 @@ class ChatViewModel(
     }
 
     /**
-     * Saves [lastAcquisitionAnswer] into permanent memory, keyed by [lastAcquisitionQuery].
-     * The timestamp is stored inside the Memory metadata automatically.
-     * Shows a confirmation message to the user.
-     *
-     * When the user later asks "when did I store this?" or "recall X", the RECALL
-     * flow in [CoreStepExecutor] surfaces the saved date automatically.
+     * Saves [lastAnswerForMemory] into permanent Room memory.
+     * Works regardless of whether the answer came from Gemini or local temp memory.
+     * The creation timestamp is stored inside Memory.metadata automatically.
+     * When the user later asks "when did I save this?" / "recall X", CoreStepExecutor
+     * surfaces the saved date.
      */
     private fun saveLastAnswerPermanently() {
-        val answer = lastAcquisitionAnswer ?: return
-        val query = lastAcquisitionQuery ?: "learned answer"
+        val answer = lastAnswerForMemory ?: return
+        val query = lastAnswerQuery ?: "learned answer"
 
         viewModelScope.launch {
             val db = KhwabDatabase.getInstance(context)
             val permanentMemory = RoomPermanentMemory(db.permanentMemoryDao())
 
-            val memory = Memory.createPermanent(
-                subject = query.trim().lowercase(),
-                value = answer,
-                category = MemoryCategory.PREFERENCE,
-                confidence = MemoryConfidence.EXPLICIT
+            permanentMemory.create(
+                Memory.createPermanent(
+                    subject = query.trim().lowercase(),
+                    value = answer,
+                    category = MemoryCategory.PREFERENCE,
+                    confidence = MemoryConfidence.EXPLICIT
+                )
             )
-            permanentMemory.create(memory)
 
-            lastAcquisitionAnswer = null
-            lastAcquisitionQuery = null
+            lastAnswerForMemory = null
+            lastAnswerQuery = null
 
             val confirmMsg = "🔒 Saved permanently! I'll always remember this answer about \"$query\".\n" +
-                             "   You can ask me to recall it anytime, or say \"when did I save this\" to see the date."
+                             "   Say **\"recall $query\"** anytime to get it back, or ask me when you saved it."
             _uiState.update { state ->
                 state.copy(
-                    isTyping = false,
                     messages = state.messages + ChatMessage(
                         id = nextId(),
                         text = confirmMsg,

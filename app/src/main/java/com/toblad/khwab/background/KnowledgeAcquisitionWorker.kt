@@ -46,7 +46,7 @@ class KnowledgeAcquisitionWorker(
         const val KEY_TTL_DAYS = "ttl_days"
         /** Output key: primary answer text placed in Result.success() outputData. */
         const val KEY_ANSWER = "answer"
-        private const val TIMEOUT_MS = 30_000L
+        private const val TIMEOUT_MS = 60_000L
 
         /**
          * Enqueue a one-time knowledge acquisition job for [query].
@@ -114,40 +114,39 @@ class KnowledgeAcquisitionWorker(
             withTimeout(TIMEOUT_MS) {
                 val prompts = promptBuilder.buildSet(query, memoryContext)
 
-                // Run all three prompts in parallel
-                val primaryDeferred = async {
-                    llmService.generate(prompts.primaryPrompt, "gemini-2.0-flash")
-                }
-                val contextDeferred = async {
-                    llmService.generate(prompts.contextPrompt, "gemini-2.0-flash")
-                }
-                val relatedDeferred = async {
-                    llmService.generate(prompts.relatedPrompt, "gemini-2.0-flash")
-                }
-
-                val primary = primaryDeferred.await()
-                val context = contextDeferred.await()
-                val related = relatedDeferred.await()
-
+                // Fire the primary prompt first — it's the one shown to the user.
+                // Only burn extra quota on context/related if the primary succeeds,
+                // to preserve free-tier limits (Gemini: 15 req/min, 1500/day).
+                val primary = llmService.generate(prompts.primaryPrompt, "gemini-2.0-flash")
                 var savedCount = 0
 
                 primary?.let { r ->
                     extractor.extract(query, r)?.let { record ->
                         repo.save(record.key, record.value, ttlDays, record.confidence)
-                        primaryAnswer = record.value   // capture for output
+                        primaryAnswer = record.value
                         savedCount++
                     }
                 }
-                context?.let { r ->
-                    extractor.extract(query, r, "::context")?.let { record ->
-                        repo.save(record.key, record.value, ttlDays, record.confidence)
-                        savedCount++
+
+                // Only fire enrichment calls if primary gave a usable answer
+                if (primaryAnswer != null) {
+                    val contextDeferred = async {
+                        llmService.generate(prompts.contextPrompt, "gemini-2.0-flash")
                     }
-                }
-                related?.let { r ->
-                    extractor.extract(query, r, "::related")?.let { record ->
-                        repo.save(record.key, record.value, ttlDays, record.confidence)
-                        savedCount++
+                    val relatedDeferred = async {
+                        llmService.generate(prompts.relatedPrompt, "gemini-2.0-flash")
+                    }
+                    contextDeferred.await()?.let { r ->
+                        extractor.extract(query, r, "::context")?.let { record ->
+                            repo.save(record.key, record.value, ttlDays, record.confidence)
+                            savedCount++
+                        }
+                    }
+                    relatedDeferred.await()?.let { r ->
+                        extractor.extract(query, r, "::related")?.let { record ->
+                            repo.save(record.key, record.value, ttlDays, record.confidence)
+                            savedCount++
+                        }
                     }
                 }
 
