@@ -8,8 +8,9 @@ import android.widget.Toast
 import com.toblad.khwab.background.KnowledgeAcquisitionWorker
 import com.toblad.khwab.db.KhwabDatabase
 import com.toblad.khwab.db.repository.RoomTemporaryKnowledgeRepository
+import com.toblad.khwab.di.KhwabProvider
 import com.toblad.khwab.executor.AndroidExecutionEngine
-import com.toblad.khwab.integration.api.KhwabIntegrationProvider
+import com.toblad.khwab.integration.api.KhwabIntegration
 import com.toblad.khwab.integration.api.request.IntegrationRequest
 import com.toblad.khwab.overlay.FloatingWindow
 import com.toblad.khwab.speech.SpeechManager
@@ -31,15 +32,19 @@ class VoiceService : Service() {
     private lateinit var speechManager: SpeechManager
     private lateinit var executionEngine: AndroidExecutionEngine
     private lateinit var floatingWindow: FloatingWindow
+    private lateinit var integration: KhwabIntegration
 
     private val serviceScope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
-
-    private val integration = KhwabIntegrationProvider.create()
 
     override fun onCreate() {
         super.onCreate()
 
         Log.d(TAG, "VoiceService created")
+
+        // Initialise the shared provider so the fully-wired integration
+        // (Room DB + OpenAI) is available to voice mode as well.
+        KhwabProvider.init(applicationContext)
+        integration = KhwabProvider.integration
 
         executionEngine = AndroidExecutionEngine(this)
         floatingWindow = FloatingWindow(this)
@@ -69,9 +74,7 @@ class VoiceService : Service() {
             floatingWindow.setState(AssistantState.READY)
             AssistantStateManager.updateState(AssistantState.READY)
 
-            Log.d(TAG, "Initializing integration")
-
-            integration.initialize()
+            Log.d(TAG, "Integration ready (Room + OpenAI wired via KhwabProvider)")
 
             speechManager.setRecognitionListener { result ->
 

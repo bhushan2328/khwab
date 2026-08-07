@@ -18,6 +18,9 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
+import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.fadeOut
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
@@ -31,6 +34,7 @@ import androidx.compose.ui.unit.sp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
 import com.toblad.khwab.aura.ui.AuraScene
+import com.toblad.khwab.background.KnowledgeAcquisitionState
 import com.toblad.khwab.ui.theme.AuraIconProvider
 import com.toblad.khwab.ui.theme.ThemeController
 import com.toblad.khwab.ui.theme.ThemeMode
@@ -43,6 +47,7 @@ fun ChatScreen(
     val colors = MaterialTheme.colorScheme
 
     val uiState by viewModel.uiState.collectAsStateWithLifecycle()
+    val acquisitionState by viewModel.acquisitionState.collectAsStateWithLifecycle()
     val listState = rememberLazyListState()
 
     LaunchedEffect(uiState.messages.size, uiState.isTyping) {
@@ -63,6 +68,31 @@ fun ChatScreen(
         topBar = {
             Column {
                 ChatTopBar(onBackClick = onBackClick)
+
+                // Knowledge acquisition indicator — shown while ChatGPT is learning
+                AnimatedVisibility(
+                    visible = acquisitionState is KnowledgeAcquisitionState.Acquiring,
+                    enter = fadeIn(),
+                    exit = fadeOut()
+                ) {
+                    val query = (acquisitionState as? KnowledgeAcquisitionState.Acquiring)?.query
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .background(colors.primaryContainer.copy(alpha = 0.30f))
+                            .padding(horizontal = 16.dp, vertical = 4.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(6.dp)
+                    ) {
+                        Text(
+                            text = if (query != null) "Learning: $query…" else "Learning…",
+                            color = colors.onSurfaceVariant,
+                            fontSize = 11.sp,
+                            fontWeight = FontWeight.Medium,
+                            maxLines = 1
+                        )
+                    }
+                }
 
                 // Aura context strip — shows live weather + time phase when Aura is on
                 if (auraActive) {

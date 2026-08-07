@@ -6,6 +6,7 @@ import com.toblad.khwab.chat.engine.ChatEngine
 import com.toblad.khwab.db.KhwabDatabase
 import com.toblad.khwab.db.repository.RoomPermanentMemory
 import com.toblad.khwab.db.repository.RoomTemporaryKnowledgeRepository
+import com.toblad.khwab.integration.api.KhwabIntegration
 import com.toblad.khwab.integration.bridge.core.DefaultCoreBridge
 import com.toblad.khwab.integration.internal.DefaultKhwabIntegration
 import com.toblad.khwab.integration.openai.OpenAIConfig
@@ -20,6 +21,9 @@ object KhwabProvider {
 
     @Volatile
     private var _chatEngine: ChatEngine? = null
+
+    @Volatile
+    private var _integration: KhwabIntegration? = null
 
     @Volatile
     private var _apiKeyStore: ApiKeyStore? = null
@@ -46,13 +50,20 @@ object KhwabProvider {
                 openAIConfig = openAIConfig
             )
 
-            val integration = DefaultKhwabIntegration(bridge).also { it.initialize() }
+            val integration = DefaultKhwabIntegration(bridge)
+                .also { it.initialize() }
+                .also { _integration = it }
             _chatEngine = BrainChatEngine(integration)
         }
     }
 
     val chatEngine: ChatEngine
         get() = _chatEngine
+            ?: error("KhwabProvider not initialized. Call KhwabProvider.init(context) first.")
+
+    /** The fully-wired integration instance (Room + OpenAI). Use in VoiceService. */
+    val integration: KhwabIntegration
+        get() = _integration
             ?: error("KhwabProvider not initialized. Call KhwabProvider.init(context) first.")
 
     val apiKeyStore: ApiKeyStore
@@ -66,6 +77,7 @@ object KhwabProvider {
     fun reinitialize(context: Context) {
         synchronized(this) {
             _chatEngine = null
+            _integration = null
             _apiKeyStore = null
         }
         init(context)
