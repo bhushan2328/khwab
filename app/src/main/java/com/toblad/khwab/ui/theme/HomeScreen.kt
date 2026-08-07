@@ -1,5 +1,7 @@
 package com.toblad.khwab.ui.theme
 
+import androidx.compose.animation.core.animateFloatAsState
+import androidx.compose.animation.core.tween
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -12,11 +14,21 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
+import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.unit.dp
+import androidx.compose.foundation.layout.WindowInsets
+import androidx.compose.foundation.layout.safeDrawing
+import androidx.compose.foundation.layout.windowInsetsPadding
 import com.toblad.khwab.aura.ui.AuraScene
 import com.toblad.khwab.state.AssistantState
 import com.toblad.khwab.state.AssistantStateManager
@@ -40,9 +52,9 @@ fun HomeScreen(
     )
 
     val statusColor = when (assistantState) {
-        AssistantState.STOPPED  -> colors.error
-        AssistantState.READY    -> colors.primary
-        AssistantState.RUNNING  -> colors.secondary
+        AssistantState.STOPPED   -> colors.error
+        AssistantState.READY     -> colors.primary
+        AssistantState.RUNNING   -> colors.secondary
         AssistantState.LISTENING -> colors.primary
         AssistantState.THINKING  -> colors.tertiary
         AssistantState.EXECUTING -> colors.secondary
@@ -50,10 +62,20 @@ fun HomeScreen(
         AssistantState.ERROR     -> colors.error
     }
 
+    // Fade-in on first composition
+    var visible by remember { mutableStateOf(false) }
+    LaunchedEffect(Unit) { visible = true }
+    val contentAlpha by animateFloatAsState(
+        targetValue = if (visible) 1f else 0f,
+        animationSpec = tween(durationMillis = 500),
+        label = "home_fade_in"
+    )
+
     Box(
         modifier = Modifier
             .fillMaxSize()
             .background(colors.background)
+            .windowInsetsPadding(WindowInsets.safeDrawing)
     ) {
         if (auraActive) {
             AuraScene(
@@ -66,12 +88,11 @@ fun HomeScreen(
             modifier = Modifier
                 .fillMaxSize()
                 .verticalScroll(rememberScrollState())
-                .padding(20.dp),
+                .padding(horizontal = 20.dp, vertical = 16.dp)
+                .alpha(contentAlpha),
             horizontalAlignment = Alignment.CenterHorizontally,
             verticalArrangement = Arrangement.Top
         ) {
-
-            Spacer(modifier = Modifier.height(16.dp))
 
             HeaderSection()
 
@@ -79,7 +100,7 @@ fun HomeScreen(
 
             MicButton(onClick = onStartClick)
 
-            Spacer(modifier = Modifier.height(36.dp))
+            Spacer(modifier = Modifier.height(32.dp))
 
             StatusCard(
                 status = assistantState.name,
@@ -87,11 +108,19 @@ fun HomeScreen(
                 message = "Say \"Hey Khwab\" or tap the microphone to begin."
             )
 
-            Spacer(modifier = Modifier.height(36.dp))
+            Spacer(modifier = Modifier.height(28.dp))
+
+            HorizontalDivider(
+                modifier = Modifier
+                    .fillMaxWidth(0.88f)
+                    .padding(vertical = 4.dp),
+                color = colors.outline.copy(alpha = 0.5f),
+                thickness = 1.dp
+            )
+
+            Spacer(modifier = Modifier.height(20.dp))
 
             // ── Adaptive Start / Stop ─────────────────────────────────────────
-            // Show only one contextually relevant action at a time.
-            // If the assistant is stopped/in error → Start; otherwise → Stop.
             if (assistantState == AssistantState.STOPPED || assistantState == AssistantState.ERROR) {
                 ActionButton(
                     text = "Start Assistant",
@@ -110,7 +139,7 @@ fun HomeScreen(
                 )
             }
 
-            Spacer(modifier = Modifier.height(16.dp))
+            Spacer(modifier = Modifier.height(12.dp))
 
             // ── Secondary actions: Chat + Settings side by side ───────────────
             Row(

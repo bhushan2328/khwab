@@ -50,6 +50,17 @@ class FloatingWindow(private val context: Context) {
         floatingView = LayoutInflater.from(context).inflate(R.layout.floating_mic, null)
         micButton = floatingView!!.findViewById(R.id.micButton)
 
+        val screenWidth = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
+            windowManager.currentWindowMetrics.bounds.width()
+        } else {
+            context.resources.displayMetrics.widthPixels
+        }
+        val screenHeight = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
+            windowManager.currentWindowMetrics.bounds.height()
+        } else {
+            context.resources.displayMetrics.heightPixels
+        }
+
         layoutParams = WindowManager.LayoutParams(
             WindowManager.LayoutParams.WRAP_CONTENT,
             WindowManager.LayoutParams.WRAP_CONTENT,
@@ -62,8 +73,9 @@ class FloatingWindow(private val context: Context) {
             PixelFormat.TRANSLUCENT
         ).apply {
             gravity = Gravity.TOP or Gravity.START
-            x = 100
-            y = 300
+            // Density-aware starting position: upper-right zone
+            x = (screenWidth * 0.80).toInt()
+            y = (screenHeight * 0.30).toInt()
         }
 
         attachDragListener()

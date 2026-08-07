@@ -9,13 +9,17 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.lazy.LazyColumn
-import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.AutoAwesome
 import androidx.compose.material3.Icon
 import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.MaterialTheme
@@ -179,32 +183,37 @@ fun ChatScreen(
                 )
             }
 
-            LazyColumn(
-                modifier = Modifier.fillMaxSize(),
-                state = listState,
-                verticalArrangement = Arrangement.spacedBy(8.dp),
-                contentPadding = PaddingValues(
-                    horizontal = 12.dp,
-                    vertical = 12.dp
-                )
-            ) {
-                groupedItems.forEach { item ->
-                    when (item) {
-                        is ChatListItem.DateHeader -> {
-                            item(key = "date_${item.label}") {
-                                DateSeparatorChip(label = item.label)
+            if (groupedItems.isEmpty() && !uiState.isTyping) {
+                // ── Empty state ─────────────────────────────────────────────
+                ChatEmptyState()
+            } else {
+                LazyColumn(
+                    modifier = Modifier.fillMaxSize(),
+                    state = listState,
+                    verticalArrangement = Arrangement.spacedBy(8.dp),
+                    contentPadding = PaddingValues(
+                        horizontal = 12.dp,
+                        vertical = 12.dp
+                    )
+                ) {
+                    groupedItems.forEach { item ->
+                        when (item) {
+                            is ChatListItem.DateHeader -> {
+                                item(key = "date_${item.label}") {
+                                    DateSeparatorChip(label = item.label)
+                                }
                             }
-                        }
-                        is ChatListItem.MessageItem -> {
-                            item(key = item.message.id) {
-                                ChatBubble(message = item.message)
+                            is ChatListItem.MessageItem -> {
+                                item(key = item.message.id) {
+                                    ChatBubble(message = item.message)
+                                }
                             }
                         }
                     }
-                }
 
-                if (uiState.isTyping) {
-                    item(key = "typing") { TypingIndicator() }
+                    if (uiState.isTyping) {
+                        item(key = "typing") { TypingIndicator() }
+                    }
                 }
             }
         }
@@ -283,4 +292,53 @@ private fun buildGroupedItems(messages: List<ChatMessage>): List<ChatListItem> {
     }
 
     return result
+}
+
+// ── Empty state ───────────────────────────────────────────────────────────────
+
+@Composable
+private fun ChatEmptyState() {
+    val colors = MaterialTheme.colorScheme
+
+    Box(
+        modifier = Modifier.fillMaxSize(),
+        contentAlignment = Alignment.Center
+    ) {
+        Column(
+            horizontalAlignment = Alignment.CenterHorizontally,
+            verticalArrangement = Arrangement.spacedBy(12.dp),
+            modifier = Modifier.padding(horizontal = 40.dp)
+        ) {
+            // Icon badge — same style as ChatTopBar avatar
+            Surface(
+                shape = RoundedCornerShape(20.dp),
+                color = colors.primaryContainer.copy(alpha = 0.7f)
+            ) {
+                Icon(
+                    imageVector = Icons.Default.AutoAwesome,
+                    contentDescription = null,
+                    tint = colors.primary,
+                    modifier = Modifier
+                        .padding(20.dp)
+                        .size(40.dp)
+                )
+            }
+
+            Spacer(modifier = Modifier.height(4.dp))
+
+            Text(
+                text = "Start a conversation",
+                style = MaterialTheme.typography.titleMedium,
+                color = colors.onSurface,
+                textAlign = TextAlign.Center
+            )
+
+            Text(
+                text = "Ask me anything — I'm your intelligent voice companion.",
+                style = MaterialTheme.typography.bodySmall,
+                color = colors.onSurfaceVariant,
+                textAlign = TextAlign.Center
+            )
+        }
+    }
 }

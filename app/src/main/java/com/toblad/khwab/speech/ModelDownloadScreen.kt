@@ -1,13 +1,22 @@
 package com.toblad.khwab.speech
 
+import androidx.compose.animation.core.FastOutSlowInEasing
+import androidx.compose.animation.core.RepeatMode
+import androidx.compose.animation.core.animateFloat
+import androidx.compose.animation.core.infiniteRepeatable
+import androidx.compose.animation.core.rememberInfiniteTransition
+import androidx.compose.animation.core.tween
+import androidx.compose.foundation.Image
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.Button
 import androidx.compose.material3.LinearProgressIndicator
@@ -19,12 +28,15 @@ import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.alpha
+import androidx.compose.ui.draw.clip
+import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
-import androidx.compose.ui.unit.sp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
+import com.toblad.khwab.R
 
 /**
  * Full-screen download screen shown on first launch when the Whisper
@@ -56,6 +68,18 @@ fun ModelDownloadScreen(
 
     val colors = MaterialTheme.colorScheme
 
+    // Logo pulse animation
+    val logoTransition = rememberInfiniteTransition(label = "logo_pulse")
+    val logoAlpha by logoTransition.animateFloat(
+        initialValue = 0.75f,
+        targetValue = 1.0f,
+        animationSpec = infiniteRepeatable(
+            animation = tween(durationMillis = 1400, easing = FastOutSlowInEasing),
+            repeatMode = RepeatMode.Reverse
+        ),
+        label = "logo_alpha"
+    )
+
     Surface(
         modifier = Modifier.fillMaxSize(),
         color = colors.background
@@ -71,15 +95,37 @@ fun ModelDownloadScreen(
                 verticalArrangement = Arrangement.spacedBy(16.dp),
                 modifier = Modifier.fillMaxWidth()
             ) {
+                // Branded logo with pulse animation
+                Image(
+                    painter = painterResource(id = R.drawable.khwab_logo),
+                    contentDescription = "Khwab",
+                    modifier = Modifier
+                        .size(96.dp)
+                        .alpha(logoAlpha)
+                )
 
                 Text(
-                    text = "Setting up Khwab",
+                    text = "Khwab",
                     style = MaterialTheme.typography.headlineSmall,
-                    fontWeight = FontWeight.Bold,
+                    fontWeight = FontWeight.ExtraBold,
                     color = colors.onBackground
                 )
 
-                Spacer(modifier = Modifier.height(4.dp))
+                Text(
+                    text = "Your intelligent voice companion",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = colors.onSurfaceVariant,
+                    textAlign = TextAlign.Center
+                )
+
+                Spacer(modifier = Modifier.height(8.dp))
+
+                Text(
+                    text = "Setting up Khwab",
+                    style = MaterialTheme.typography.titleMedium,
+                    fontWeight = FontWeight.SemiBold,
+                    color = colors.onBackground
+                )
 
                 when (val s = state) {
 
@@ -91,28 +137,42 @@ fun ModelDownloadScreen(
                         Text(
                             text = "Downloading speech recognition model…\nThis happens once and requires Wi-Fi.",
                             color = colors.onSurfaceVariant,
-                            fontSize = 14.sp,
-                            textAlign = TextAlign.Center,
-                            lineHeight = 20.sp
+                            style = MaterialTheme.typography.bodyMedium,
+                            textAlign = TextAlign.Center
                         )
 
                         Spacer(modifier = Modifier.height(8.dp))
 
-                        LinearProgressIndicator(
-                            progress = { percent / 100f },
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .height(8.dp),
-                            trackColor = colors.surfaceVariant,
-                            color = colors.primary
-                        )
+                        // Rounded progress bar with inline percentage label
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.spacedBy(10.dp)
+                        ) {
+                            LinearProgressIndicator(
+                                progress = { percent / 100f },
+                                modifier = Modifier
+                                    .weight(1f)
+                                    .height(8.dp)
+                                    .clip(RoundedCornerShape(50)),
+                                trackColor = colors.surfaceVariant,
+                                color = colors.primary
+                            )
+                            Text(
+                                text = "$percent%",
+                                color = colors.onSurfaceVariant,
+                                style = MaterialTheme.typography.labelMedium
+                            )
+                        }
 
-                        Text(
-                            text = if (fileName.isNotBlank()) "$percent% — $fileName"
-                                   else "$percent%",
-                            color = colors.onSurfaceVariant,
-                            fontSize = 12.sp
-                        )
+                        if (fileName.isNotBlank()) {
+                            Text(
+                                text = fileName,
+                                color = colors.onSurfaceVariant,
+                                style = MaterialTheme.typography.labelSmall,
+                                textAlign = TextAlign.Center
+                            )
+                        }
                     }
 
                     is ModelDownloadState.Failed -> {
@@ -120,18 +180,18 @@ fun ModelDownloadScreen(
                             text = "Download failed",
                             color = colors.error,
                             fontWeight = FontWeight.SemiBold,
-                            fontSize = 16.sp
+                            style = MaterialTheme.typography.titleSmall
                         )
                         Text(
                             text = s.message,
                             color = colors.onSurfaceVariant,
-                            fontSize = 13.sp,
+                            style = MaterialTheme.typography.bodySmall,
                             textAlign = TextAlign.Center
                         )
                         Spacer(modifier = Modifier.height(8.dp))
                         Button(
                             onClick = viewModel::retry,
-                            shape = RoundedCornerShape(12.dp)
+                            shape = RoundedCornerShape(14.dp)
                         ) {
                             Text("Retry")
                         }
@@ -144,7 +204,7 @@ fun ModelDownloadScreen(
                             text = "Ready!",
                             color = colors.primary,
                             fontWeight = FontWeight.Bold,
-                            fontSize = 18.sp
+                            style = MaterialTheme.typography.titleMedium
                         )
                     }
                 }

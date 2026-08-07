@@ -48,10 +48,6 @@ fun MicButton(
     )
 
     // ── Pulse animation config per state ─────────────────────────────────────
-    // STOPPED / ERROR → no pulse (scale = 1f)
-    // READY           → slow gentle pulse (1.0 → 1.06, 1800 ms)
-    // LISTENING       → fast strong pulse (1.0 → 1.12, 600 ms)
-    // THINKING / EXECUTING / SPEAKING / RUNNING → medium (1.0 → 1.08, 900 ms)
     data class PulseConfig(
         val targetScale: Float,
         val durationMs: Int,
@@ -87,7 +83,7 @@ fun MicButton(
     // Ring alpha pulses independently — visible only in active states
     val ringAlpha by transition.animateFloat(
         initialValue = if (pulseConfig.active) 0.18f else 0f,
-        targetValue = if (pulseConfig.active) 0.42f else 0f,
+        targetValue  = if (pulseConfig.active) 0.42f else 0f,
         animationSpec = infiniteRepeatable(
             animation = tween(durationMillis = pulseConfig.durationMs, easing = FastOutSlowInEasing),
             repeatMode = RepeatMode.Reverse
@@ -96,7 +92,7 @@ fun MicButton(
     )
 
     val buttonSize: Dp = 160.dp
-    val ringSize: Dp = 196.dp   // ring sits 18 dp outside the button edge on each side
+    val ringSize: Dp   = 196.dp
 
     Box(
         modifier = modifier.size(ringSize),
@@ -128,9 +124,11 @@ fun MicButton(
                     .fillMaxSize()
                     .clip(CircleShape)
                     .background(
+                        // Fixed: use primaryContainer → primary → background
+                        // (old code used tertiary = red in center)
                         Brush.radialGradient(
                             colors = listOf(
-                                colors.tertiary,
+                                colors.primaryContainer,
                                 colors.primary,
                                 colors.background
                             )

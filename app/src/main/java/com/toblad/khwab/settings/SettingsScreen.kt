@@ -3,24 +3,28 @@ package com.toblad.khwab.settings
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.Add
-import androidx.compose.material.icons.filled.ArrowBack
-import androidx.compose.material.icons.filled.Remove
+import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material3.Card
 import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Scaffold
+import androidx.compose.material3.Slider
+import androidx.compose.material3.SliderDefaults
 import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
 import androidx.compose.material3.TopAppBar
+import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -52,15 +56,24 @@ fun SettingsScreen(
         AuraBridge.updateConfig(newConfig)
     }
 
+    val colors = MaterialTheme.colorScheme
+
     Scaffold(
         topBar = {
             TopAppBar(
-                title = { Text("Aura Settings") },
+                title = { Text("Settings", style = MaterialTheme.typography.titleLarge) },
                 navigationIcon = {
                     IconButton(onClick = onBackClick) {
-                        Icon(Icons.Default.ArrowBack, contentDescription = "Back")
+                        Icon(
+                            imageVector = Icons.AutoMirrored.Filled.ArrowBack,
+                            contentDescription = "Back"
+                        )
                     }
-                }
+                },
+                colors = TopAppBarDefaults.topAppBarColors(
+                    containerColor = colors.surface,
+                    titleContentColor = colors.onSurface
+                )
             )
         }
     ) { padding ->
@@ -70,23 +83,34 @@ fun SettingsScreen(
                 .fillMaxSize()
                 .padding(padding)
                 .verticalScroll(rememberScrollState())
-                .padding(20.dp),
-            verticalArrangement = Arrangement.spacedBy(16.dp)
+                .padding(horizontal = 20.dp, vertical = 8.dp),
+            verticalArrangement = Arrangement.spacedBy(8.dp)
         ) {
+
+            // ── Section: Appearance ────────────────────────────────────────────
+            SectionHeader(title = "Appearance")
 
             SettingSwitchRow(
                 title = "Aura Enabled",
                 subtitle = "Master switch for the ambient theme",
                 checked = config.enabled,
                 onCheckedChange = { checked ->
-                    if (checked) {
-                        AuraBridge.activate()
-                    } else {
-                        AuraBridge.deactivate()
-                    }
+                    if (checked) AuraBridge.activate() else AuraBridge.deactivate()
                     config = AuraBridge.getConfig()
                 }
             )
+
+            SettingSwitchRow(
+                title = "Animations",
+                subtitle = "Rain, snow, fireflies, leaves and petals",
+                checked = config.animationsEnabled,
+                onCheckedChange = { applyChange(config.copy(animationsEnabled = it)) }
+            )
+
+            Spacer(modifier = Modifier.height(8.dp))
+
+            // ── Section: Data & Location ───────────────────────────────────────
+            SectionHeader(title = "Data & Location")
 
             SettingSwitchRow(
                 title = "Follow Real Time",
@@ -102,12 +126,15 @@ fun SettingsScreen(
                 onCheckedChange = { applyChange(config.copy(autoWeather = it)) }
             )
 
-            SettingSwitchRow(
-                title = "Animations",
-                subtitle = "Rain, snow, fireflies, leaves and petals",
-                checked = config.animationsEnabled,
-                onCheckedChange = { applyChange(config.copy(animationsEnabled = it)) }
+            RefreshIntervalRow(
+                minutes = config.refreshIntervalMinutes,
+                onMinutesChange = { applyChange(config.copy(refreshIntervalMinutes = it)) }
             )
+
+            Spacer(modifier = Modifier.height(8.dp))
+
+            // ── Section: Audio ─────────────────────────────────────────────────
+            SectionHeader(title = "Audio")
 
             SettingSwitchRow(
                 title = "Ambient Sound",
@@ -116,13 +143,31 @@ fun SettingsScreen(
                 onCheckedChange = { applyChange(config.copy(ambientSoundEnabled = it)) }
             )
 
-            RefreshIntervalRow(
-                minutes = config.refreshIntervalMinutes,
-                onMinutesChange = { applyChange(config.copy(refreshIntervalMinutes = it)) }
-            )
+            Spacer(modifier = Modifier.height(16.dp))
         }
     }
 }
+
+// ── Section header label ──────────────────────────────────────────────────────
+
+@Composable
+private fun SectionHeader(title: String) {
+    Column {
+        Text(
+            text = title.uppercase(),
+            style = MaterialTheme.typography.labelMedium,
+            color = MaterialTheme.colorScheme.primary,
+            modifier = Modifier.padding(horizontal = 4.dp, vertical = 4.dp)
+        )
+        HorizontalDivider(
+            color = MaterialTheme.colorScheme.outline.copy(alpha = 0.4f),
+            thickness = 1.dp,
+            modifier = Modifier.padding(bottom = 8.dp)
+        )
+    }
+}
+
+// ── Toggle row ────────────────────────────────────────────────────────────────
 
 @Composable
 private fun SettingSwitchRow(
@@ -131,7 +176,6 @@ private fun SettingSwitchRow(
     checked: Boolean,
     onCheckedChange: (Boolean) -> Unit
 ) {
-
     Card(modifier = Modifier.fillMaxWidth()) {
         Row(
             modifier = Modifier
@@ -141,44 +185,76 @@ private fun SettingSwitchRow(
             verticalAlignment = Alignment.CenterVertically
         ) {
             Column(modifier = Modifier.weight(1f)) {
-                Text(text = title, style = MaterialTheme.typography.titleMedium)
-                Text(text = subtitle, style = MaterialTheme.typography.bodySmall)
+                Text(text = title, style = MaterialTheme.typography.titleSmall)
+                Text(
+                    text = subtitle,
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
             }
             Switch(checked = checked, onCheckedChange = onCheckedChange)
         }
     }
 }
 
+// ── Refresh interval — Slider replacing the cramped +/- stepper ──────────────
+
 @Composable
 private fun RefreshIntervalRow(
     minutes: Int,
     onMinutesChange: (Int) -> Unit
 ) {
+    val colors = MaterialTheme.colorScheme
 
     Card(modifier = Modifier.fillMaxWidth()) {
-        Row(
+        Column(
             modifier = Modifier
                 .fillMaxWidth()
-                .padding(16.dp),
-            horizontalArrangement = Arrangement.SpaceBetween,
-            verticalAlignment = Alignment.CenterVertically
+                .padding(16.dp)
         ) {
-            Column(modifier = Modifier.weight(1f)) {
-                Text(text = "Refresh Interval", style = MaterialTheme.typography.titleMedium)
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Column(modifier = Modifier.weight(1f)) {
+                    Text(text = "Weather Refresh", style = MaterialTheme.typography.titleSmall)
+                    Text(
+                        text = "How often weather is re-checked",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = colors.onSurfaceVariant
+                    )
+                }
                 Text(
-                    text = "How often weather is re-checked (minutes)",
-                    style = MaterialTheme.typography.bodySmall
+                    text = "$minutes min",
+                    style = MaterialTheme.typography.labelLarge,
+                    color = colors.primary
                 )
             }
 
-            IconButton(onClick = { if (minutes > 1) onMinutesChange(minutes - 1) }) {
-                Icon(Icons.Default.Remove, contentDescription = "Decrease interval")
-            }
+            Spacer(modifier = Modifier.height(8.dp))
 
-            Text(text = "$minutes", style = MaterialTheme.typography.titleMedium)
+            // Slider: step = 5, range 5..60
+            val steps = ((60 - 5) / 5) - 1  // 10 steps between 5 and 60
+            Slider(
+                value = minutes.toFloat(),
+                onValueChange = { onMinutesChange(it.toInt()) },
+                valueRange = 5f..60f,
+                steps = steps,
+                colors = SliderDefaults.colors(
+                    thumbColor = colors.primary,
+                    activeTrackColor = colors.primary,
+                    inactiveTrackColor = colors.outline
+                ),
+                modifier = Modifier.fillMaxWidth()
+            )
 
-            IconButton(onClick = { if (minutes < 60) onMinutesChange(minutes + 1) }) {
-                Icon(Icons.Default.Add, contentDescription = "Increase interval")
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween
+            ) {
+                Text("5 min", style = MaterialTheme.typography.labelSmall, color = colors.onSurfaceVariant)
+                Text("60 min", style = MaterialTheme.typography.labelSmall, color = colors.onSurfaceVariant)
             }
         }
     }

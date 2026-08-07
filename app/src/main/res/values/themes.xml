@@ -1,5 +1,15 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
 
-    <style name="Theme.Khwab" parent="android:Theme.Material.Light.NoActionBar" />
+    <!-- Pure-Compose app: window theme only needs to set a dark background
+         and transparent system bars. No Material Components inheritance needed. -->
+    <style name="Theme.Khwab" parent="android:Theme.Material.NoActionBar">
+        <item name="android:windowBackground">@color/khwab_background</item>
+        <item name="android:statusBarColor">@android:color/transparent</item>
+        <item name="android:navigationBarColor">@android:color/transparent</item>
+        <item name="android:windowLightStatusBar">false</item>
+        <item name="android:windowTranslucentStatus">false</item>
+        <item name="android:windowTranslucentNavigation">false</item>
+    </style>
+
 </resources>

@@ -12,6 +12,8 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.widthIn
+import androidx.compose.foundation.layout.wrapContentWidth
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.AutoAwesome
@@ -87,9 +89,12 @@ fun ChatBubble(message: ChatMessage) {
         horizontalArrangement = if (isUser) Arrangement.End else Arrangement.Start
     ) {
         if (isUser) {
-            // ── User bubble ───────────────────────────────────────────────────
+            // ── User bubble — wraps content width, capped at 78% / 480dp ─────
             Card(
-                modifier = Modifier.fillMaxWidth(0.78f),
+                modifier = Modifier
+                    .wrapContentWidth()
+                    .widthIn(min = 72.dp, max = 480.dp)
+                    .fillMaxWidth(0.78f),
                 shape = RoundedCornerShape(
                     topStart = 20.dp, topEnd = 20.dp,
                     bottomStart = 20.dp, bottomEnd = 6.dp
@@ -139,7 +144,12 @@ fun ChatBubble(message: ChatMessage) {
             // ── Khwab (assistant) bubble — rich GPT-style rendering ───────────
             // Width capped at 0.88f (was 0.95f) so wide screens have breathing room.
             // animateContentSize makes the in-place placeholder→answer expansion smooth.
-            Column(modifier = Modifier.fillMaxWidth(0.88f)) {
+            // Assistant bubble: capped at 88% / 520dp for tablet comfort
+            Column(
+                modifier = Modifier
+                    .widthIn(max = 520.dp)
+                    .fillMaxWidth(0.88f)
+            ) {
                 // Khwab label row
                 Row(
                     verticalAlignment = Alignment.CenterVertically,
