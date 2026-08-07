@@ -7,6 +7,10 @@ import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
 import androidx.activity.result.contract.ActivityResultContracts
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.saveable.rememberSaveable
+import androidx.compose.runtime.setValue
 import com.toblad.khwab.aura.AuraBridge
 import com.toblad.khwab.chat.ChatActivity
 import com.toblad.khwab.logging.LogModule
@@ -14,7 +18,8 @@ import com.toblad.khwab.logging.Logger
 import com.toblad.khwab.permission.PermissionManager
 import com.toblad.khwab.service.VoiceService
 import com.toblad.khwab.settings.SettingsActivity
-import com.toblad.khwab.speech.ModelInitializer
+import com.toblad.khwab.speech.ModelDownloadManager
+import com.toblad.khwab.speech.ModelDownloadScreen
 import com.toblad.khwab.state.AssistantState
 import com.toblad.khwab.state.AssistantStateManager
 import com.toblad.khwab.ui.theme.HomeScreen
@@ -36,9 +41,6 @@ class MainActivity : ComponentActivity() {
         // follow-time, follow-weather, animations, ambient
         // sound, refresh interval) before Aura is used anywhere.
         AuraBridge.initialize(applicationContext)
-
-        // Prepare Whisper models once when the app starts
-        ModelInitializer.prepare(applicationContext)
 
         enableEdgeToEdge()
 
@@ -76,45 +78,57 @@ class MainActivity : ComponentActivity() {
 
             KhwabTheme {
 
-                HomeScreen(
+                // On first launch the Whisper model files are not yet on disk.
+                // Show the download screen until they are ready, then show Home.
+                var modelsReady by rememberSaveable {
+                    mutableStateOf(ModelDownloadManager.modelsReady(applicationContext))
+                }
 
-                    onStartClick = {
+                if (!modelsReady) {
+                    ModelDownloadScreen(
+                        onReady = { modelsReady = true }
+                    )
+                } else {
+                    HomeScreen(
 
-                        permissionLauncher.launch(
-                            permissionManager.requiredPermissions()
-                        )
+                        onStartClick = {
 
-                    },
-
-                    onStopClick = {
-
-                        stopAssistant()
-
-                    },
-
-                    onChatClick = {
-
-                        startActivity(
-                            Intent(
-                                this@MainActivity,
-                                ChatActivity::class.java
+                            permissionLauncher.launch(
+                                permissionManager.requiredPermissions()
                             )
-                        )
 
-                    },
+                        },
 
-                    onSettingsClick = {
+                        onStopClick = {
 
-                        startActivity(
-                            Intent(
-                                this@MainActivity,
-                                SettingsActivity::class.java
+                            stopAssistant()
+
+                        },
+
+                        onChatClick = {
+
+                            startActivity(
+                                Intent(
+                                    this@MainActivity,
+                                    ChatActivity::class.java
+                                )
                             )
-                        )
 
-                    }
+                        },
 
-                )
+                        onSettingsClick = {
+
+                            startActivity(
+                                Intent(
+                                    this@MainActivity,
+                                    SettingsActivity::class.java
+                                )
+                            )
+
+                        }
+
+                    )
+                }
 
             }
 

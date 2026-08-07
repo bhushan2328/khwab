@@ -20,6 +20,12 @@ android {
         versionName = "1.0"
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
+
+        // Only package the arm64-v8a native libs — covers all real Android phones
+        // made after 2017. Drops x86/x86_64/armeabi-v7a duplicates (~75 MB).
+        ndk {
+            abiFilters += listOf("arm64-v8a")
+        }
     }
 
     buildTypes {
