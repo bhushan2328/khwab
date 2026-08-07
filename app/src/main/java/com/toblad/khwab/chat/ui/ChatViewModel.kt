@@ -16,10 +16,16 @@ import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
+import java.util.concurrent.atomic.AtomicLong
 
 class ChatViewModel(
     application: Application
 ) : AndroidViewModel(application) {
+
+    // Monotonically increasing counter — avoids duplicate IDs from
+    // System.currentTimeMillis() on fast devices.
+    private val idCounter = AtomicLong(System.currentTimeMillis())
+    private fun nextId() = idCounter.incrementAndGet()
 
     // Initialize dependencies inside the ViewModel instead of constructor
     private val chatEngine: ChatEngine = KhwabProvider.chatEngine
@@ -36,7 +42,7 @@ class ChatViewModel(
         ChatUiState(
             messages = listOf(
                 ChatMessage(
-                    id = 1L,
+                    id = nextId(),
                     text = "Hello Mr. Bhushan! I'm Khwab. How can I help you today?",
                     sender = Sender.KHWAB
                 )
@@ -58,7 +64,7 @@ class ChatViewModel(
         if (input.isBlank()) return
 
         val userMessage = ChatMessage(
-            id = System.currentTimeMillis(),
+            id = nextId(),
             text = input,
             sender = Sender.USER,
             status = MessageStatus.SENT,
@@ -88,7 +94,7 @@ class ChatViewModel(
                 state.copy(
                     isTyping = false,
                     messages = state.messages + ChatMessage(
-                        id = System.currentTimeMillis(),
+                        id = nextId(),
                         text = replyText,
                         sender = Sender.KHWAB,
                         status = MessageStatus.SENT,

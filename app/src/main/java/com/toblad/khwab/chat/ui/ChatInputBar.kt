@@ -6,6 +6,8 @@ import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.text.KeyboardActions
+import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Mic
 import androidx.compose.material.icons.filled.Send
@@ -17,6 +19,7 @@ import androidx.compose.material3.OutlinedTextFieldDefaults
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.unit.dp
 import com.toblad.khwab.ui.theme.AuraIconProvider
 import com.toblad.khwab.ui.theme.ThemeController
@@ -52,15 +55,17 @@ fun ChatInputBar(
         horizontalArrangement = Arrangement.spacedBy(8.dp)
     ) {
 
+        val canSend = text.isNotBlank()
+
         OutlinedTextField(
             value = text,
             onValueChange = onTextChange,
             modifier = Modifier.weight(1f),
-            placeholder = {
-                Text("Type a message...")
-            },
+            placeholder = { Text("Type a message...") },
             maxLines = 5,
             shape = RoundedCornerShape(24.dp),
+            keyboardOptions = KeyboardOptions(imeAction = ImeAction.Send),
+            keyboardActions = KeyboardActions(onSend = { if (canSend) onSendClick() }),
             colors = OutlinedTextFieldDefaults.colors(
                 focusedBorderColor = colors.primary,
                 unfocusedBorderColor = colors.outline,
@@ -79,11 +84,14 @@ fun ChatInputBar(
             )
         }
 
-        IconButton(onClick = onSendClick) {
+        IconButton(
+            onClick = onSendClick,
+            enabled = canSend
+        ) {
             Icon(
                 imageVector = Icons.Default.Send,
                 contentDescription = "Send",
-                tint = colors.primary
+                tint = if (canSend) colors.primary else colors.outline
             )
         }
     }

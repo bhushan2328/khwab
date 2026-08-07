@@ -1,12 +1,12 @@
 package com.toblad.khwab.speech
 
+import android.annotation.SuppressLint
 import android.media.AudioFormat
 import android.media.AudioRecord
 import android.media.MediaRecorder
 import kotlin.concurrent.thread
 
 class AudioRecorder {
-    @android.annotation.SuppressLint("MissingPermission")
 
     private val sampleRate = 16000
 
@@ -16,26 +16,31 @@ class AudioRecorder {
         AudioFormat.ENCODING_PCM_16BIT
     )
 
-    private val recorder = AudioRecord(
-        MediaRecorder.AudioSource.MIC,
-        sampleRate,
-        AudioFormat.CHANNEL_IN_MONO,
-        AudioFormat.ENCODING_PCM_16BIT,
-        bufferSize
-    )
+    // Lazily created on first startRecording() call — by that point the
+    // RECORD_AUDIO permission has already been granted by the caller.
+    private var recorder: AudioRecord? = null
 
     @Volatile
     private var recording = false
 
-    fun startRecording(
-        onAudio: (FloatArray) -> Unit
-    ) {
+    @SuppressLint("MissingPermission")
+    fun startRecording(onAudio: (FloatArray) -> Unit) {
 
         if (recording) return
 
-        recording = true
+        // Build AudioRecord here, after the permission has been confirmed.
+        if (recorder == null) {
+            recorder = AudioRecord(
+                MediaRecorder.AudioSource.MIC,
+                sampleRate,
+                AudioFormat.CHANNEL_IN_MONO,
+                AudioFormat.ENCODING_PCM_16BIT,
+                bufferSize
+            )
+        }
 
-        recorder.startRecording()
+        recording = true
+        recorder!!.startRecording()
 
         thread {
 
@@ -43,11 +48,7 @@ class AudioRecorder {
 
             while (recording) {
 
-                val read = recorder.read(
-                    pcm,
-                    0,
-                    pcm.size
-                )
+                val read = recorder!!.read(pcm, 0, pcm.size)
 
                 if (read > 0) {
 
@@ -64,14 +65,13 @@ class AudioRecorder {
     }
 
     fun stopRecording() {
-
         recording = false
-
-        recorder.stop()
+        recorder?.stop()
     }
 
     fun release() {
-
-        recorder.release()
+        recording = false
+        recorder?.release()
+        recorder = null
     }
 }

@@ -1,0 +1,15 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Fast side-to-side shake — used for SPEAKING (like a soundwave wiggle) -->
+<set xmlns:android="http://schemas.android.com/apk/res/android"
+    android:ordering="together">
+
+    <objectAnimator
+        android:propertyName="translationX"
+        android:valueFrom="0"
+        android:valueTo="6"
+        android:duration="80"
+        android:repeatMode="reverse"
+        android:repeatCount="infinite"
+        android:interpolator="@android:interpolator/linear" />
+
+</set>

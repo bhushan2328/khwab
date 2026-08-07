@@ -7,12 +7,33 @@ import com.toblad.khwab.aura.model.AmbientLightStyle
 import com.toblad.khwab.aura.model.SkyStyle
 import com.toblad.khwab.aura.model.ThemeProfile
 import com.toblad.khwab.aura.model.WeatherEffectStyle
+import kotlin.math.pow
 
 /**
  * Builds a Material3 [ColorScheme] from Aura's current
  * [ThemeProfile] — driven by real sky, ambient light, and
  * weather conditions rather than a single fixed palette.
  */
+/**
+ * Returns white or a near-black depending on which gives the
+ * higher WCAG contrast ratio against [background].
+ * Uses the sRGB relative-luminance formula so it adapts to every
+ * Aura sky/accent colour automatically.
+ */
+private fun contrastOn(background: Color): Color {
+    fun linearise(c: Float) =
+        if (c <= 0.04045f) c / 12.92f else ((c + 0.055f) / 1.055f).pow(2.4f)
+
+    val r = linearise(background.red)
+    val g = linearise(background.green)
+    val b = linearise(background.blue)
+    val luminance = 0.2126f * r + 0.7152f * g + 0.0722f * b
+
+    // WCAG: contrast against white = (1 + 0.05) / (L + 0.05)
+    //       contrast against dark  = (L + 0.05) / (0.05 + 0.05) … simplified
+    return if (luminance > 0.179f) Color(0xFF13101F) else Color(0xFFF5F3FF)
+}
+
 fun auraColorScheme(profile: ThemeProfile): ColorScheme {
 
     val sky = skyPalette(profile.sky)
@@ -23,13 +44,13 @@ fun auraColorScheme(profile: ThemeProfile): ColorScheme {
 
     return darkColorScheme(
         primary = accent,
-        onPrimary = Color(0xFF13101F),
+        onPrimary = contrastOn(accent),
 
         secondary = sky.secondary,
-        onSecondary = Color(0xFF13101F),
+        onSecondary = contrastOn(sky.secondary),
 
         tertiary = sky.tertiary,
-        onTertiary = Color(0xFF13101F),
+        onTertiary = contrastOn(sky.tertiary),
 
         background = background,
         onBackground = sky.onSurface,

@@ -7,4 +7,13 @@
     <color name="teal_700">#FF018786</color>
     <color name="black">#FF000000</color>
     <color name="white">#FFFFFFFF</color>
+
+    <!-- Overlay mic state colours -->
+    <color name="mic_idle">#CC6200EE</color>
+    <color name="mic_listening">#CCCC0000</color>
+    <color name="mic_thinking">#CCFF8F00</color>
+    <color name="mic_executing">#CC0288D1</color>
+    <color name="mic_speaking">#CC00897B</color>
+    <color name="mic_error">#CCB71C1C</color>
+    <color name="mic_ripple">#50FFFFFF</color>
 </resources>

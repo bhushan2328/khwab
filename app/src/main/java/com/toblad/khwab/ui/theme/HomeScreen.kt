@@ -77,7 +77,7 @@ fun HomeScreen(
 
             Spacer(modifier = Modifier.height(40.dp))
 
-            MicButton(onClick = {})
+            MicButton(onClick = onStartClick)
 
             Spacer(modifier = Modifier.height(36.dp))
 

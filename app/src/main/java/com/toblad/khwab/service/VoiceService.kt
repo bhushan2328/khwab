@@ -10,6 +10,8 @@ import com.toblad.khwab.integration.api.KhwabIntegrationProvider
 import com.toblad.khwab.integration.api.request.IntegrationRequest
 import com.toblad.khwab.overlay.FloatingWindow
 import com.toblad.khwab.speech.SpeechManager
+import com.toblad.khwab.state.AssistantState
+import com.toblad.khwab.state.AssistantStateManager
 
 class VoiceService : Service() {
 
@@ -54,6 +56,8 @@ class VoiceService : Service() {
             Log.d(TAG, "Showing floating window")
 
             floatingWindow.show()
+            floatingWindow.setState(AssistantState.READY)
+            AssistantStateManager.updateState(AssistantState.READY)
 
             Log.d(TAG, "Initializing integration")
 
@@ -63,20 +67,35 @@ class VoiceService : Service() {
 
                 Log.d("Sherpa", result.text)
 
-                val response = integration.process(
-                    IntegrationRequest(
-                        input = result.text
+                floatingWindow.setState(AssistantState.THINKING)
+                AssistantStateManager.updateState(AssistantState.THINKING)
+
+                val response = try {
+                    integration.process(
+                        IntegrationRequest(
+                            input = result.text
+                        )
                     )
-                )
+                } catch (e: Exception) {
+                    floatingWindow.setState(AssistantState.ERROR)
+                    Log.e(TAG, "Integration error", e)
+                    return@setRecognitionListener
+                }
 
                 response.executionPlan?.let { plan ->
 
                     Log.d("Khwab", "Executing: ${plan.action}")
 
+                    floatingWindow.setState(AssistantState.EXECUTING)
+                    AssistantStateManager.updateState(AssistantState.EXECUTING)
+
                     val success = executionEngine.execute(plan)
 
                     Log.d("Khwab", "Execution Success: $success")
                 }
+
+                floatingWindow.setState(AssistantState.LISTENING)
+                AssistantStateManager.updateState(AssistantState.LISTENING)
             }
 
             Log.d(TAG, "Initializing Sherpa")
@@ -85,6 +104,8 @@ class VoiceService : Service() {
 
             Log.d(TAG, "Starting listening")
 
+            floatingWindow.setState(AssistantState.LISTENING)
+            AssistantStateManager.updateState(AssistantState.LISTENING)
             speechManager.startListening()
 
             Log.d(TAG, "VoiceService started successfully")
