@@ -9,14 +9,18 @@ import androidx.work.OneTimeWorkRequestBuilder
 import androidx.work.WorkManager
 import androidx.work.WorkerParameters
 import androidx.work.workDataOf
+import com.toblad.khwab.BuildConfig
 import com.toblad.khwab.db.KhwabDatabase
+import com.toblad.khwab.db.repository.RoomPermanentMemory
 import com.toblad.khwab.db.repository.RoomTemporaryKnowledgeRepository
 import com.toblad.khwab.integration.llm.LLMService
+import com.toblad.khwab.integration.openai.FallbackLLMClient
+import com.toblad.khwab.integration.openai.GeminiClient
+import com.toblad.khwab.integration.openai.GeminiConfig
 import com.toblad.khwab.integration.openai.LLMKnowledgeExtractor
-import com.toblad.khwab.integration.openai.OpenAIClient
-import com.toblad.khwab.integration.openai.OpenAIConfig
+import com.toblad.khwab.integration.openai.OpenRouterClient
+import com.toblad.khwab.integration.openai.OpenRouterConfig
 import com.toblad.khwab.integration.openai.RelatedPromptBuilder
-import com.toblad.khwab.security.ApiKeyStore
 import kotlinx.coroutines.async
 import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.withTimeout
@@ -88,36 +92,37 @@ class KnowledgeAcquisitionWorker(
 
         Log.d(TAG, "Starting knowledge acquisition: $query")
 
-        val apiKey = ApiKeyStore(applicationContext).getApiKey()
-            ?: run {
-                Log.w(TAG, "No API key configured — skipping acquisition")
-                return@coroutineScope Result.failure()
-            }
-
-        val config = OpenAIConfig(apiKey = apiKey)
-        val client = OpenAIClient(config)
+        val db = KhwabDatabase.getInstance(applicationContext)
+        val geminiClient = GeminiClient(GeminiConfig(apiKey = BuildConfig.GEMINI_API_KEY))
+        val openRouterClient = OpenRouterClient(OpenRouterConfig(apiKey = BuildConfig.OPENROUTER_API_KEY))
+        val client = FallbackLLMClient(primary = geminiClient, fallback = openRouterClient)
         val llmService = LLMService(client)
         val promptBuilder = RelatedPromptBuilder()
         val extractor = LLMKnowledgeExtractor()
-        val repo = RoomTemporaryKnowledgeRepository(
-            KhwabDatabase.getInstance(applicationContext).temporaryKnowledgeDao()
+        val repo = RoomTemporaryKnowledgeRepository(db.temporaryKnowledgeDao())
+
+        // Gather relevant memory context to enrich the prompts
+        val memoryContext = buildMemoryContext(
+            query = query,
+            permanentMemory = RoomPermanentMemory(db.permanentMemoryDao()),
+            temporaryRepo = repo
         )
 
         return@coroutineScope try {
             var primaryAnswer: String? = null
 
             withTimeout(TIMEOUT_MS) {
-                val prompts = promptBuilder.buildSet(query)
+                val prompts = promptBuilder.buildSet(query, memoryContext)
 
                 // Run all three prompts in parallel
                 val primaryDeferred = async {
-                    llmService.generate(prompts.primaryPrompt, config.model)
+                    llmService.generate(prompts.primaryPrompt, "gemini-2.0-flash")
                 }
                 val contextDeferred = async {
-                    llmService.generate(prompts.contextPrompt, config.model)
+                    llmService.generate(prompts.contextPrompt, "gemini-2.0-flash")
                 }
                 val relatedDeferred = async {
-                    llmService.generate(prompts.relatedPrompt, config.model)
+                    llmService.generate(prompts.relatedPrompt, "gemini-2.0-flash")
                 }
 
                 val primary = primaryDeferred.await()
@@ -162,5 +167,40 @@ class KnowledgeAcquisitionWorker(
             try { client.close() } catch (_: Exception) {}
             if (runAttemptCount < 3) Result.retry() else Result.failure()
         }
+    }
+
+    /**
+     * Assembles a short memory-context block from permanent memory (all records) and
+     * the best temporary knowledge match for [query].
+     *
+     * Only includes entries whose subject/key is related to the query (substring match).
+     * Result is a plain-text block suitable for inclusion in an LLM prompt.
+     */
+    private suspend fun buildMemoryContext(
+        query: String,
+        permanentMemory: RoomPermanentMemory,
+        temporaryRepo: RoomTemporaryKnowledgeRepository
+    ): String {
+        val norm = query.trim().lowercase()
+        val sb = StringBuilder()
+
+        // Permanent memory: include records whose subject is mentioned in the query
+        permanentMemory.all()
+            .filter { mem ->
+                norm.contains(mem.subject.lowercase()) ||
+                mem.subject.lowercase().split(" ").any { norm.contains(it) && it.length > 3 }
+            }
+            .take(5)
+            .forEach { mem -> sb.appendLine("- ${mem.subject}: ${mem.value}") }
+
+        // Best temporary match
+        val tempResult = temporaryRepo.search(query)
+        if (tempResult.tier != com.toblad.khwab.core.knowledge.KnowledgeTier.NONE) {
+            tempResult.record?.let { rec ->
+                sb.appendLine("- (previously learned) ${rec.key}: ${rec.value.take(200)}")
+            }
+        }
+
+        return sb.toString().trim()
     }
 }

@@ -12,7 +12,11 @@ import com.toblad.khwab.chat.model.ChatMessage
 import com.toblad.khwab.chat.model.MessageState
 import com.toblad.khwab.chat.model.MessageStatus
 import com.toblad.khwab.chat.model.Sender
+import com.toblad.khwab.core.memory.model.MemoryCategory
+import com.toblad.khwab.core.memory.model.MemoryConfidence
+import com.toblad.khwab.core.memory.model.Memory
 import com.toblad.khwab.db.KhwabDatabase
+import com.toblad.khwab.db.repository.RoomPermanentMemory
 import com.toblad.khwab.db.repository.RoomTemporaryKnowledgeRepository
 import com.toblad.khwab.di.KhwabProvider
 import com.toblad.khwab.executor.AndroidExecutionEngine
@@ -66,6 +70,13 @@ class ChatViewModel(
     val acquisitionState: StateFlow<KnowledgeAcquisitionState> =
         _acquisitionState.asStateFlow()
 
+    /**
+     * Holds the last AI-fetched answer so "remember this" can save it permanently.
+     * Cleared whenever a new acquisition starts.
+     */
+    private var lastAcquisitionAnswer: String? = null
+    private var lastAcquisitionQuery: String? = null
+
     fun onInputChanged(text: String) {
         _uiState.update { it.copy(input = text) }
     }
@@ -73,6 +84,13 @@ class ChatViewModel(
     fun sendMessage() {
         val input = uiState.value.input.trim()
         if (input.isBlank()) return
+
+        // Short-circuit: "remember this" on last AI answer → save permanently
+        if (isRememberThisCommand(input) && lastAcquisitionAnswer != null) {
+            _uiState.update { it.copy(input = "") }
+            saveLastAnswerPermanently()
+            return
+        }
 
         val userMessage = ChatMessage(
             id = nextId(),
@@ -123,6 +141,8 @@ class ChatViewModel(
                 // Schedule background knowledge acquisition if needed
                 if (response.requiresAcquisition) {
                     val query = response.acquisitionQuery ?: input
+                    lastAcquisitionAnswer = null
+                    lastAcquisitionQuery = query
                     _acquisitionState.value = KnowledgeAcquisitionState.Acquiring(query)
                     val workId = KnowledgeAcquisitionWorker.enqueue(context, query)
                     observeAcquisition(workId, query)
@@ -144,11 +164,8 @@ class ChatViewModel(
     /**
      * Observes a [KnowledgeAcquisitionWorker] job by its [workId].
      *
-     * Suspends until the work reaches a terminal state, then:
-     * - SUCCEEDED → reads the primary answer from output data and posts it
-     *   as a new Khwab message; resets acquisition state to Completed.
-     * - FAILED / CANCELLED → resets acquisition state to Failed so the
-     *   "Learning…" strip disappears and the user is not left hanging.
+     * On SUCCEEDED → stores the answer in [lastAcquisitionAnswer] and posts it
+     * as a Khwab message so the user can reply "remember this" to save it permanently.
      */
     private fun observeAcquisition(workId: UUID, query: String) {
         viewModelScope.launch {
@@ -163,6 +180,7 @@ class ChatViewModel(
                             val answer = info.outputData
                                 .getString(KnowledgeAcquisitionWorker.KEY_ANSWER)
                             if (!answer.isNullOrBlank()) {
+                                lastAcquisitionAnswer = answer
                                 _uiState.update { state ->
                                     state.copy(
                                         messages = state.messages + ChatMessage(
@@ -186,6 +204,66 @@ class ChatViewModel(
                         }
                     }
                 }
+        }
+    }
+
+    // ── "Remember this" helpers ───────────────────────────────────────────────
+
+    /**
+     * Returns true if [input] is a "remember this" intent referring to the last
+     * AI-fetched answer.
+     */
+    private fun isRememberThisCommand(input: String): Boolean {
+        val lower = input.trim().lowercase()
+        return lower == "remember this" ||
+               lower == "remember this answer" ||
+               lower == "save this" ||
+               lower == "save this answer" ||
+               lower.startsWith("remember this") ||
+               lower.startsWith("please remember this")
+    }
+
+    /**
+     * Saves [lastAcquisitionAnswer] into permanent memory, keyed by [lastAcquisitionQuery].
+     * The timestamp is stored inside the Memory metadata automatically.
+     * Shows a confirmation message to the user.
+     *
+     * When the user later asks "when did I store this?" or "recall X", the RECALL
+     * flow in [CoreStepExecutor] surfaces the saved date automatically.
+     */
+    private fun saveLastAnswerPermanently() {
+        val answer = lastAcquisitionAnswer ?: return
+        val query = lastAcquisitionQuery ?: "learned answer"
+
+        viewModelScope.launch {
+            val db = KhwabDatabase.getInstance(context)
+            val permanentMemory = RoomPermanentMemory(db.permanentMemoryDao())
+
+            val memory = Memory.createPermanent(
+                subject = query.trim().lowercase(),
+                value = answer,
+                category = MemoryCategory.PREFERENCE,
+                confidence = MemoryConfidence.EXPLICIT
+            )
+            permanentMemory.create(memory)
+
+            lastAcquisitionAnswer = null
+            lastAcquisitionQuery = null
+
+            val confirmMsg = "🔒 Saved permanently! I'll always remember this answer about \"$query\".\n" +
+                             "   You can ask me to recall it anytime, or say \"when did I save this\" to see the date."
+            _uiState.update { state ->
+                state.copy(
+                    isTyping = false,
+                    messages = state.messages + ChatMessage(
+                        id = nextId(),
+                        text = confirmMsg,
+                        sender = Sender.KHWAB,
+                        status = MessageStatus.SENT,
+                        state = MessageState.COMPLETE
+                    )
+                )
+            }
         }
     }
 }
