@@ -5,6 +5,9 @@ import android.content.Intent
 import android.os.IBinder
 import android.util.Log
 import android.widget.Toast
+import com.toblad.khwab.background.KnowledgeAcquisitionWorker
+import com.toblad.khwab.db.KhwabDatabase
+import com.toblad.khwab.db.repository.RoomTemporaryKnowledgeRepository
 import com.toblad.khwab.executor.AndroidExecutionEngine
 import com.toblad.khwab.integration.api.KhwabIntegrationProvider
 import com.toblad.khwab.integration.api.request.IntegrationRequest
@@ -12,6 +15,11 @@ import com.toblad.khwab.overlay.FloatingWindow
 import com.toblad.khwab.speech.SpeechManager
 import com.toblad.khwab.state.AssistantState
 import com.toblad.khwab.state.AssistantStateManager
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.cancel
+import kotlinx.coroutines.launch
 
 class VoiceService : Service() {
 
