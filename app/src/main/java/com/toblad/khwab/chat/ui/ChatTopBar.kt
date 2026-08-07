@@ -5,7 +5,7 @@ import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.ArrowBack
+import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.DeleteSweep
 import androidx.compose.material.icons.filled.MoreVert
 import androidx.compose.material3.DropdownMenu
@@ -13,6 +13,7 @@ import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
@@ -24,6 +25,8 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import com.toblad.khwab.ui.theme.ThemeController
+import com.toblad.khwab.ui.theme.ThemeMode
 
 @Composable
 fun ChatTopBar(
@@ -33,63 +36,70 @@ fun ChatTopBar(
     val colors = MaterialTheme.colorScheme
     var menuExpanded by remember { mutableStateOf(false) }
 
-    Row(
-        modifier = Modifier
-            .fillMaxWidth()
-            .padding(horizontal = 8.dp, vertical = 12.dp),
-        verticalAlignment = Alignment.CenterVertically,
-        horizontalArrangement = Arrangement.SpaceBetween
-    ) {
+    val auraActive = ThemeController.currentTheme == ThemeMode.AURA
 
+    // In Aura mode render a semi-transparent frosted surface so the title
+    // stays legible over any sky colour (bright sunrise, dark midnight, etc.)
+    val surfaceColor = if (auraActive)
+        colors.surface.copy(alpha = 0.72f)
+    else
+        colors.surface
+
+    Surface(color = surfaceColor) {
         Row(
-            verticalAlignment = Alignment.CenterVertically
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(horizontal = 8.dp, vertical = 12.dp),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.SpaceBetween
         ) {
 
-            IconButton(
-                onClick = onBackClick
-            ) {
-                Icon(
-                    imageVector = Icons.Default.ArrowBack,
-                    contentDescription = "Back",
-                    tint = colors.onBackground
+            Row(verticalAlignment = Alignment.CenterVertically) {
+
+                IconButton(onClick = onBackClick) {
+                    Icon(
+                        imageVector = Icons.AutoMirrored.Filled.ArrowBack,
+                        contentDescription = "Back",
+                        tint = colors.onSurface
+                    )
+                }
+
+                Text(
+                    text = "KHWAB",
+                    color = colors.onSurface,
+                    fontSize = 22.sp,
+                    fontWeight = FontWeight.Bold,
+                    style = MaterialTheme.typography.titleLarge
                 )
             }
 
-            Text(
-                text = "KHWAB",
-                color = colors.onBackground,
-                fontSize = 22.sp,
-                fontWeight = FontWeight.Bold,
-                style = MaterialTheme.typography.titleLarge
-            )
-        }
+            // ── Overflow menu ─────────────────────────────────────────────────
+            IconButton(onClick = { menuExpanded = true }) {
+                Icon(
+                    imageVector = Icons.Default.MoreVert,
+                    contentDescription = "Menu",
+                    tint = colors.onSurface
+                )
+            }
 
-        // ── Overflow menu ─────────────────────────────────────────────────────
-        IconButton(onClick = { menuExpanded = true }) {
-            Icon(
-                imageVector = Icons.Default.MoreVert,
-                contentDescription = "Menu",
-                tint = colors.onBackground
-            )
-        }
-
-        DropdownMenu(
-            expanded = menuExpanded,
-            onDismissRequest = { menuExpanded = false }
-        ) {
-            DropdownMenuItem(
-                text = { Text("Clear Chat") },
-                leadingIcon = {
-                    Icon(
-                        imageVector = Icons.Default.DeleteSweep,
-                        contentDescription = null
-                    )
-                },
-                onClick = {
-                    menuExpanded = false
-                    onClearChat()
-                }
-            )
+            DropdownMenu(
+                expanded = menuExpanded,
+                onDismissRequest = { menuExpanded = false }
+            ) {
+                DropdownMenuItem(
+                    text = { Text("Clear Chat") },
+                    leadingIcon = {
+                        Icon(
+                            imageVector = Icons.Default.DeleteSweep,
+                            contentDescription = null
+                        )
+                    },
+                    onClick = {
+                        menuExpanded = false
+                        onClearChat()
+                    }
+                )
+            }
         }
     }
 }

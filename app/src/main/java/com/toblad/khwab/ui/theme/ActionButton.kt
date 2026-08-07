@@ -35,7 +35,6 @@ fun ActionButton(
         onClick = onClick,
         enabled = enabled,
         modifier = modifier
-            .fillMaxWidth(0.88f)
             .height(64.dp),
         shape = RoundedCornerShape(22.dp),
         colors = ButtonDefaults.buttonColors(

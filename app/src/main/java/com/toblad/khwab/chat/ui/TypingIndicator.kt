@@ -1,6 +1,6 @@
 package com.toblad.khwab.chat.ui
 
-import androidx.compose.animation.core.LinearEasing
+import androidx.compose.animation.core.FastOutSlowInEasing
 import androidx.compose.animation.core.RepeatMode
 import androidx.compose.animation.core.animateFloat
 import androidx.compose.animation.core.infiniteRepeatable
@@ -34,24 +34,42 @@ fun TypingIndicator() {
     val containerColor = if (auraActive) colors.surfaceVariant.copy(alpha = 0.72f)
                          else colors.surfaceVariant
 
+    // Dot colour matches the accent so it feels part of the assistant brand
+    val dotColor = colors.primary.copy(alpha = 0.80f)
+
     val transition = rememberInfiniteTransition(label = "typing")
 
-    // Three dots staggered by 150 ms each
-    val offsets = (0..2).map { index ->
-        val dot by transition.animateFloat(
+    // Three dots: staggered 160 ms each, scale + Y with FastOutSlowIn for "breathing" feel
+    data class DotAnim(val yOffset: Float, val scale: Float)
+
+    val dotAnims = (0..2).map { index ->
+        val yOffset by transition.animateFloat(
             initialValue = 0f,
-            targetValue = -8f,
+            targetValue = -9f,
             animationSpec = infiniteRepeatable(
                 animation = tween(
-                    durationMillis = 400,
-                    delayMillis = index * 150,
-                    easing = LinearEasing
+                    durationMillis = 500,
+                    delayMillis = index * 160,
+                    easing = FastOutSlowInEasing
                 ),
                 repeatMode = RepeatMode.Reverse
             ),
-            label = "dot_$index"
+            label = "dot_y_$index"
         )
-        dot
+        val scale by transition.animateFloat(
+            initialValue = 0.80f,
+            targetValue = 1.0f,
+            animationSpec = infiniteRepeatable(
+                animation = tween(
+                    durationMillis = 500,
+                    delayMillis = index * 160,
+                    easing = FastOutSlowInEasing
+                ),
+                repeatMode = RepeatMode.Reverse
+            ),
+            label = "dot_scale_$index"
+        )
+        DotAnim(yOffset, scale)
     }
 
     Card(
@@ -66,13 +84,17 @@ fun TypingIndicator() {
             horizontalArrangement = Arrangement.spacedBy(6.dp),
             verticalAlignment = Alignment.CenterVertically
         ) {
-            offsets.forEach { yOffset ->
+            dotAnims.forEach { anim ->
                 Surface(
                     modifier = Modifier
                         .size(8.dp)
-                        .graphicsLayer { translationY = yOffset },
+                        .graphicsLayer {
+                            translationY = anim.yOffset
+                            scaleX = anim.scale
+                            scaleY = anim.scale
+                        },
                     shape = CircleShape,
-                    color = colors.onSurfaceVariant.copy(alpha = 0.70f)
+                    color = dotColor
                 ) {}
             }
         }

@@ -1,5 +1,7 @@
 package com.toblad.khwab.chat.ui
 
+import androidx.compose.animation.animateContentSize
+import androidx.compose.animation.core.tween
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -135,7 +137,9 @@ fun ChatBubble(message: ChatMessage) {
             }
         } else {
             // ── Khwab (assistant) bubble — rich GPT-style rendering ───────────
-            Column(modifier = Modifier.fillMaxWidth(0.95f)) {
+            // Width capped at 0.88f (was 0.95f) so wide screens have breathing room.
+            // animateContentSize makes the in-place placeholder→answer expansion smooth.
+            Column(modifier = Modifier.fillMaxWidth(0.88f)) {
                 // Khwab label row
                 Row(
                     verticalAlignment = Alignment.CenterVertically,
@@ -171,7 +175,10 @@ fun ChatBubble(message: ChatMessage) {
                 }
 
                 Card(
-                    modifier = Modifier.fillMaxWidth(),
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        // Smooth expand when placeholder text is replaced by the full answer
+                        .animateContentSize(animationSpec = tween(durationMillis = 300)),
                     shape = RoundedCornerShape(
                         topStart = 6.dp, topEnd = 20.dp,
                         bottomStart = 20.dp, bottomEnd = 20.dp
