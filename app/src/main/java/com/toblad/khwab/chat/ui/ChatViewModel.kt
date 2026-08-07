@@ -296,6 +296,25 @@ class ChatViewModel(
         }
     }
 
+    // ── Clear chat ────────────────────────────────────────────────────────────
+
+    fun clearChat() {
+        viewModelScope.launch {
+            chatMessageDao.deleteAll()
+            val welcome = ChatMessage(
+                id = nextId(),
+                text = "Conversation cleared. How can I help you?",
+                sender = Sender.KHWAB,
+                status = MessageStatus.SENT,
+                state = MessageState.COMPLETE
+            )
+            chatMessageDao.upsert(welcome.toEntity())
+            _uiState.update { ChatUiState(messages = listOf(welcome)) }
+            lastAnswerForMemory = null
+            lastAnswerQuery = null
+        }
+    }
+
     // ── "Remember this" helpers ───────────────────────────────────────────────
 
     private fun isRememberThisCommand(input: String): Boolean {
@@ -304,8 +323,13 @@ class ChatViewModel(
                lower == "remember this answer" ||
                lower == "save this" ||
                lower == "save this answer" ||
+               lower == "please remember this" ||
+               lower == "yes remember this" ||
+               lower == "store this" ||
                lower.startsWith("remember this") ||
-               lower.startsWith("please remember this")
+               lower.startsWith("please remember this") ||
+               lower.startsWith("save this answer") ||
+               lower.startsWith("store this")
     }
 
     private fun isAnswerWorthRemembering(text: String): Boolean {

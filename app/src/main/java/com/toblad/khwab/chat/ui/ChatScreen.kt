@@ -67,7 +67,10 @@ fun ChatScreen(
         containerColor = scaffoldBg,
         topBar = {
             Column {
-                ChatTopBar(onBackClick = onBackClick)
+                ChatTopBar(
+                    onBackClick = onBackClick,
+                    onClearChat = viewModel::clearChat
+                )
 
                 // Knowledge acquisition indicator — shown while ChatGPT is learning
                 AnimatedVisibility(
