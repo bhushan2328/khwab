@@ -20,6 +20,7 @@ import com.toblad.khwab.security.ApiKeyStore
 import kotlinx.coroutines.async
 import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.withTimeout
+import java.util.UUID
 
 /**
  * WorkManager [CoroutineWorker] that acquires knowledge from ChatGPT in the background.
@@ -39,6 +40,8 @@ class KnowledgeAcquisitionWorker(
         private const val TAG = "KnowledgeAcquisition"
         const val KEY_QUERY = "query"
         const val KEY_TTL_DAYS = "ttl_days"
+        /** Output key: primary answer text placed in Result.success() outputData. */
+        const val KEY_ANSWER = "answer"
         private const val TIMEOUT_MS = 30_000L
 
         /**
@@ -46,11 +49,13 @@ class KnowledgeAcquisitionWorker(
          *
          * Uses [ExistingWorkPolicy.KEEP] so a second request for the same query
          * is silently dropped if one is already pending or running.
+         *
+         * Returns the [UUID] of the enqueued work request so the caller can
+         * observe [WorkInfo] and retrieve the answer from [KEY_ANSWER].
          */
-        fun enqueue(context: Context, query: String, ttlDays: Int = 30) {
+        fun enqueue(context: Context, query: String, ttlDays: Int = 30): UUID {
             val normKey = query.trim().lowercase()
 
-            // Skip if we already have fresh knowledge (checked before enqueueing)
             val request = OneTimeWorkRequestBuilder<KnowledgeAcquisitionWorker>()
                 .setConstraints(
                     Constraints.Builder()
@@ -72,7 +77,8 @@ class KnowledgeAcquisitionWorker(
                     request
                 )
 
-            Log.d(TAG, "Enqueued acquisition for: $normKey")
+            Log.d(TAG, "Enqueued acquisition for: $normKey (id=${request.id})")
+            return request.id
         }
     }
 
@@ -98,6 +104,8 @@ class KnowledgeAcquisitionWorker(
         )
 
         return@coroutineScope try {
+            var primaryAnswer: String? = null
+
             withTimeout(TIMEOUT_MS) {
                 val prompts = promptBuilder.buildSet(query)
 
@@ -121,6 +129,7 @@ class KnowledgeAcquisitionWorker(
                 primary?.let { r ->
                     extractor.extract(query, r)?.let { record ->
                         repo.save(record.key, record.value, ttlDays, record.confidence)
+                        primaryAnswer = record.value   // capture for output
                         savedCount++
                     }
                 }
@@ -141,7 +150,13 @@ class KnowledgeAcquisitionWorker(
                 client.close()
             }
 
-            Result.success()
+            val answer = primaryAnswer
+            if (answer != null) {
+                Result.success(workDataOf(KEY_ANSWER to answer))
+            } else {
+                Log.w(TAG, "No extractable answer for '$query'")
+                Result.failure()
+            }
         } catch (e: Exception) {
             Log.e(TAG, "Acquisition failed for '$query': ${e.message}")
             try { client.close() } catch (_: Exception) {}

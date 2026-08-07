@@ -3,6 +3,8 @@ package com.toblad.khwab.chat.ui
 import android.app.Application
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
+import androidx.work.WorkInfo
+import androidx.work.WorkManager
 import com.toblad.khwab.background.KnowledgeAcquisitionState
 import com.toblad.khwab.background.KnowledgeAcquisitionWorker
 import com.toblad.khwab.chat.engine.ChatEngine
@@ -18,8 +20,10 @@ import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
+import java.util.UUID
 import java.util.concurrent.atomic.AtomicLong
 
 class ChatViewModel(
@@ -120,7 +124,8 @@ class ChatViewModel(
                 if (response.requiresAcquisition) {
                     val query = response.acquisitionQuery ?: input
                     _acquisitionState.value = KnowledgeAcquisitionState.Acquiring(query)
-                    KnowledgeAcquisitionWorker.enqueue(context, query)
+                    val workId = KnowledgeAcquisitionWorker.enqueue(context, query)
+                    observeAcquisition(workId, query)
                 }
 
                 // If user asked to forget learned knowledge, delete from temp store
@@ -133,6 +138,54 @@ class ChatViewModel(
                     }
                 }
             }
+        }
+    }
+
+    /**
+     * Observes a [KnowledgeAcquisitionWorker] job by its [workId].
+     *
+     * Suspends until the work reaches a terminal state, then:
+     * - SUCCEEDED → reads the primary answer from output data and posts it
+     *   as a new Khwab message; resets acquisition state to Completed.
+     * - FAILED / CANCELLED → resets acquisition state to Failed so the
+     *   "Learning…" strip disappears and the user is not left hanging.
+     */
+    private fun observeAcquisition(workId: UUID, query: String) {
+        viewModelScope.launch {
+            WorkManager.getInstance(context)
+                .getWorkInfoByIdFlow(workId)
+                .first { info ->
+                    info != null && info.state.isFinished
+                }
+                ?.let { info ->
+                    when (info.state) {
+                        WorkInfo.State.SUCCEEDED -> {
+                            val answer = info.outputData
+                                .getString(KnowledgeAcquisitionWorker.KEY_ANSWER)
+                            if (!answer.isNullOrBlank()) {
+                                _uiState.update { state ->
+                                    state.copy(
+                                        messages = state.messages + ChatMessage(
+                                            id = nextId(),
+                                            text = answer,
+                                            sender = Sender.KHWAB,
+                                            status = MessageStatus.SENT,
+                                            state = MessageState.COMPLETE
+                                        )
+                                    )
+                                }
+                            }
+                            _acquisitionState.value =
+                                KnowledgeAcquisitionState.Completed(query)
+                        }
+                        else -> {
+                            _acquisitionState.value = KnowledgeAcquisitionState.Failed(
+                                query = query,
+                                reason = "Knowledge acquisition did not complete."
+                            )
+                        }
+                    }
+                }
         }
     }
 }
