@@ -48,6 +48,17 @@ fun ActionButton(
     val interactionSource = remember { MutableInteractionSource() }
     val isPressed by interactionSource.collectIsPressedAsState()
 
+    // In daytime Aura the outlined buttons are rendered over a bright sky.
+    // Use white border+content so they stay visible regardless of sky colour.
+    val isDaytimeAura = ThemeController.currentTheme == ThemeMode.AURA &&
+            ThemeController.currentAuraTheme.timePhase in listOf(
+                com.toblad.khwab.aura.model.TimePhase.SUNRISE,
+                com.toblad.khwab.aura.model.TimePhase.MORNING,
+                com.toblad.khwab.aura.model.TimePhase.NOON,
+                com.toblad.khwab.aura.model.TimePhase.AFTERNOON
+            )
+    val outlinedColor = if (outlined && isDaytimeAura) Color.White else backgroundColor
+
     val scale by animateFloatAsState(
         targetValue = if (isPressed) 0.96f else 1f,
         animationSpec = tween(durationMillis = 100),
@@ -90,9 +101,9 @@ fun ActionButton(
             interactionSource = interactionSource,
             modifier = modifier.height(60.dp).scale(scale),
             shape = shape,
-            border = BorderStroke(1.5.dp, if (enabled) backgroundColor else colors.outline),
+            border = BorderStroke(1.5.dp, if (enabled) outlinedColor else colors.outline),
             colors = ButtonDefaults.outlinedButtonColors(
-                contentColor = backgroundColor,
+                contentColor = outlinedColor,
                 disabledContentColor = colors.onSurfaceVariant
             )
         ) { content() }

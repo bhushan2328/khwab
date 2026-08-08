@@ -148,11 +148,19 @@ fun HomeScreen(
 
             Spacer(modifier = Modifier.height(28.dp))
 
+            // Use white divider over bright daytime Aura sky so it stays visible
+            val isDaytimeDivider = auraActive && auraTheme.timePhase in listOf(
+                com.toblad.khwab.aura.model.TimePhase.SUNRISE,
+                com.toblad.khwab.aura.model.TimePhase.MORNING,
+                com.toblad.khwab.aura.model.TimePhase.NOON,
+                com.toblad.khwab.aura.model.TimePhase.AFTERNOON
+            )
             HorizontalDivider(
                 modifier = Modifier
                     .fillMaxWidth(0.88f)
                     .padding(vertical = 4.dp),
-                color     = colors.outline.copy(alpha = 0.5f),
+                color     = if (isDaytimeDivider) Color.White.copy(alpha = 0.6f)
+                            else colors.outline.copy(alpha = 0.5f),
                 thickness = 1.dp
             )
 

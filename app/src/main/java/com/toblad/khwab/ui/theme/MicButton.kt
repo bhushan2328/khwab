@@ -31,6 +31,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.scale
 import androidx.compose.ui.graphics.Brush
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.hapticfeedback.HapticFeedbackType
 import androidx.compose.ui.platform.LocalHapticFeedback
 import androidx.compose.ui.unit.Dp
@@ -125,6 +126,16 @@ fun MicButton(
     val ringSize: Dp   = 196.dp
     val outerRingSize: Dp = 224.dp
 
+    // In daytime Aura mode the pulse rings should be white so they're visible
+    // against the bright sky. At night / dark themes use the primary brand colour.
+    val isDaytimeAura = auraActive && ThemeController.currentAuraTheme.timePhase in listOf(
+        com.toblad.khwab.aura.model.TimePhase.SUNRISE,
+        com.toblad.khwab.aura.model.TimePhase.MORNING,
+        com.toblad.khwab.aura.model.TimePhase.NOON,
+        com.toblad.khwab.aura.model.TimePhase.AFTERNOON
+    )
+    val ringColor = if (isDaytimeAura) Color.White else colors.primary
+
     Box(
         modifier = modifier.size(outerRingSize),
         contentAlignment = Alignment.Center
@@ -136,7 +147,7 @@ fun MicButton(
                     .size(outerRingSize)
                     .scale(outerRingScale)
                     .clip(CircleShape)
-                    .background(colors.primary.copy(alpha = outerRingAlpha))
+                    .background(ringColor.copy(alpha = outerRingAlpha))
             )
         }
 
@@ -147,7 +158,7 @@ fun MicButton(
                     .size(ringSize)
                     .scale(pulseScale)
                     .clip(CircleShape)
-                    .background(colors.primary.copy(alpha = innerRingAlpha))
+                    .background(ringColor.copy(alpha = innerRingAlpha))
             )
         }
 
