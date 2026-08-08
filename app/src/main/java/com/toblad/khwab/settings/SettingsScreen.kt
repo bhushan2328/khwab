@@ -1,7 +1,9 @@
 package com.toblad.khwab.settings
 
 import androidx.compose.foundation.BorderStroke
+import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
@@ -16,6 +18,7 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.AccessTime
 import androidx.compose.material.icons.filled.Brush
+import androidx.compose.ui.graphics.Brush as UiBrush
 import androidx.compose.material.icons.filled.Cloud
 import androidx.compose.material.icons.filled.LocationOn
 import androidx.compose.material.icons.filled.MusicNote
@@ -82,12 +85,26 @@ fun SettingsScreen(
                     }
                 },
                 colors = TopAppBarDefaults.topAppBarColors(
-                    containerColor = colors.surface,
+                    containerColor = colors.surface.copy(alpha = 0.95f), // fix #24: consistent semi-transparent
                     titleContentColor = colors.onSurface
                 )
             )
         }
     ) { padding ->
+
+        // fix #14: subtle top-to-background gradient for visual depth
+        Box(
+            modifier = Modifier
+                .fillMaxSize()
+                .background(
+                    UiBrush.verticalGradient(
+                        colors = listOf(
+                            colors.primaryContainer.copy(alpha = 0.12f),
+                            colors.background
+                        )
+                    )
+                )
+        ) {}
 
         Column(
             modifier = Modifier
@@ -198,11 +215,11 @@ private fun SettingSwitchRow(
         modifier = Modifier.fillMaxWidth(),
         border = BorderStroke(
             width = 1.dp,
-            color = if (checked) colors.primary.copy(alpha = 0.35f)
+            color = if (checked) colors.primary.copy(alpha = 0.55f)   // fix #15: stronger active border
                     else colors.outline.copy(alpha = 0.25f)
         ),
         colors = CardDefaults.cardColors(
-            containerColor = if (checked) colors.primaryContainer.copy(alpha = 0.18f)
+            containerColor = if (checked) colors.primaryContainer.copy(alpha = 0.32f)  // fix #15: more visible tint
                              else colors.surface
         )
     ) {

@@ -71,8 +71,8 @@ fun ChatBubble(message: ChatMessage) {
     if (auraActive) {
         val weatherTint = weatherBubbleTint(auraTheme.weatherState)
         val timeTint = timeBubbleTint(auraTheme.timePhase)
-        userBubbleColor = lerp(colors.primary, weatherTint, 0.25f).copy(alpha = 0.82f)
-        assistantBubbleColor = lerp(colors.surfaceVariant, timeTint, 0.20f).copy(alpha = 0.75f)
+        userBubbleColor = lerp(colors.primary, weatherTint, 0.20f).copy(alpha = 0.92f)
+        assistantBubbleColor = lerp(colors.surfaceVariant, timeTint, 0.15f).copy(alpha = 0.88f)
         userTextColor = colors.onPrimary
         assistantTextColor = colors.onSurfaceVariant
     } else {
@@ -413,11 +413,11 @@ private fun weatherBubbleTint(weather: WeatherState): Color = when (weather) {
     WeatherState.RAIN   -> Color(0xFF4A8FCC)
     WeatherState.SNOW   -> Color(0xFFB8D8F0)
     WeatherState.FOG    -> Color(0xFFA9B0B4)
-    WeatherState.STORM  -> Color(0xFF3A4A5E)
+    WeatherState.STORM  -> Color(0xFF5C7A9E)   // fix #13: brighter steel blue, was near-black
 }
 
 private fun timeBubbleTint(phase: TimePhase): Color = when (phase) {
-    TimePhase.PRE_DAWN  -> Color(0xFF10122B)
+    TimePhase.PRE_DAWN  -> Color(0xFF2D2B6E)   // fix #12: soft indigo, was near-black
     TimePhase.SUNRISE   -> Color(0xFFFF9A6C)
     TimePhase.MORNING   -> Color(0xFF5FC7FF)
     TimePhase.NOON      -> Color(0xFF3AD1FF)

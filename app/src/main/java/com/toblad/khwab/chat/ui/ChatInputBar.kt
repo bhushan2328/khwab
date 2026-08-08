@@ -49,14 +49,14 @@ fun ChatInputBar(
 
     val auraActive = ThemeController.currentTheme == ThemeMode.AURA
 
-    // Gradient scrim behind the input bar so content fades naturally into it
+    // fix #21: scrim starts at slight alpha so text field always has a base
     val barBackground = if (auraActive) {
         Modifier.background(
             Brush.verticalGradient(
                 listOf(
-                    colors.surface.copy(alpha = 0f),
-                    colors.surface.copy(alpha = 0.85f),
-                    colors.surface.copy(alpha = 0.95f)
+                    colors.surface.copy(alpha = 0.15f),
+                    colors.surface.copy(alpha = 0.88f),
+                    colors.surface.copy(alpha = 0.97f)
                 )
             )
         )
@@ -66,9 +66,9 @@ fun ChatInputBar(
 
     val canSend = text.isNotBlank()
 
-    // Animate send button background color: primary when ready, surfaceVariant when empty
+    // fix #26: distinct disabled state — outline ghost instead of surfaceVariant
     val sendBgColor by animateColorAsState(
-        targetValue = if (canSend) colors.primary else colors.surfaceVariant,
+        targetValue = if (canSend) colors.primary else colors.outline.copy(alpha = 0.35f),
         animationSpec = tween(durationMillis = 220),
         label = "send_bg_color"
     )
@@ -106,7 +106,7 @@ fun ChatInputBar(
             }),
             colors = OutlinedTextFieldDefaults.colors(
                 focusedBorderColor   = colors.primary,
-                unfocusedBorderColor = colors.outline,
+                unfocusedBorderColor = colors.outline.copy(alpha = 0.85f),  // fix #22: stronger border
                 focusedTextColor     = colors.onSurface,
                 unfocusedTextColor   = colors.onSurface,
                 cursorColor          = colors.primary,
@@ -138,7 +138,7 @@ fun ChatInputBar(
                 Icon(
                     imageVector = Icons.AutoMirrored.Filled.Send,
                     contentDescription = "Send",
-                    tint = if (canSend) colors.onPrimary else colors.onSurfaceVariant.copy(alpha = 0.45f),
+                    tint = if (canSend) colors.onPrimary else colors.onSurfaceVariant.copy(alpha = 0.60f), // fix #26
                     modifier = Modifier.size(22.dp)
                 )
             }

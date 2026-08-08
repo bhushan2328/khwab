@@ -55,6 +55,7 @@ import androidx.compose.ui.unit.sp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
 import kotlinx.coroutines.launch
+import com.toblad.khwab.aura.model.TimePhase
 import com.toblad.khwab.aura.ui.AuraScene
 import com.toblad.khwab.background.KnowledgeAcquisitionState
 import com.toblad.khwab.chat.model.ChatMessage
@@ -96,6 +97,11 @@ fun ChatScreen(
     val auraActive = ThemeController.currentTheme == ThemeMode.AURA
     val auraTheme = ThemeController.currentAuraTheme
 
+    // fix #17, #18: daytime Aura awareness for chips and learning bar
+    val isDaytimeAura = auraActive && auraTheme.timePhase in listOf(
+        TimePhase.SUNRISE, TimePhase.MORNING, TimePhase.NOON, TimePhase.AFTERNOON
+    )
+
     val scaffoldBg = if (auraActive) Color.Transparent else colors.background
 
     // Group messages by calendar day for date-separator chips
@@ -121,10 +127,14 @@ fun ChatScreen(
                     exit = fadeOut()
                 ) {
                     val query = (acquisitionState as? KnowledgeAcquisitionState.Acquiring)?.query
+                    // fix #18: readable in daytime Aura
+                    val learnBg = if (isDaytimeAura) Color.Black.copy(alpha = 0.18f)
+                                  else colors.primaryContainer.copy(alpha = 0.25f)
+                    val learnTextColor = if (isDaytimeAura) Color.White else colors.onSurfaceVariant
                     Column(
                         modifier = Modifier
                             .fillMaxWidth()
-                            .background(colors.primaryContainer.copy(alpha = 0.25f))
+                            .background(learnBg)
                     ) {
                         Row(
                             modifier = Modifier
@@ -135,7 +145,7 @@ fun ChatScreen(
                         ) {
                             Text(
                                 text = if (query != null) "Learning: $query…" else "Learning…",
-                                color = colors.onSurfaceVariant,
+                                color = learnTextColor,
                                 fontSize = 11.sp,
                                 fontWeight = FontWeight.Medium,
                                 maxLines = 1
@@ -279,6 +289,17 @@ fun ChatScreen(
 @Composable
 private fun DateSeparatorChip(label: String) {
     val colors = MaterialTheme.colorScheme
+    // fix #17: Aura daytime chip contrast
+    val auraActive = ThemeController.currentTheme == ThemeMode.AURA
+    val timePhase = ThemeController.currentAuraTheme.timePhase
+    val isDaytime = auraActive && timePhase in listOf(
+        TimePhase.SUNRISE, TimePhase.MORNING, TimePhase.NOON, TimePhase.AFTERNOON
+    )
+    val chipColor = when {
+        isDaytime  -> Color.White.copy(alpha = 0.75f)
+        auraActive -> colors.surfaceVariant.copy(alpha = 0.85f)
+        else       -> colors.surfaceVariant.copy(alpha = 0.70f)
+    }
     Box(
         modifier = Modifier
             .fillMaxWidth()
@@ -287,7 +308,7 @@ private fun DateSeparatorChip(label: String) {
     ) {
         Surface(
             shape = RoundedCornerShape(12.dp),
-            color = colors.surfaceVariant.copy(alpha = 0.70f)
+            color = chipColor
         ) {
             Text(
                 text = label,
@@ -388,10 +409,13 @@ private fun ChatEmptyState(onSuggestionClick: (String) -> Unit = {}) {
                 verticalArrangement = Arrangement.spacedBy(12.dp),
                 modifier = Modifier.padding(horizontal = 40.dp)
             ) {
-                // Breathing icon badge
+                // Breathing icon badge - fix #16: solid container + subtle border
                 Surface(
                     shape = RoundedCornerShape(20.dp),
-                    color = colors.primaryContainer.copy(alpha = 0.7f),
+                    color = colors.primaryContainer,
+                    border = androidx.compose.foundation.BorderStroke(
+                        1.dp, colors.primary.copy(alpha = 0.30f)
+                    ),
                     modifier = Modifier.scale(breathScale)
                 ) {
                     Icon(

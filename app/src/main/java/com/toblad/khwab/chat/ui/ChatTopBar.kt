@@ -33,6 +33,7 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
+import com.toblad.khwab.aura.model.TimePhase
 import com.toblad.khwab.ui.theme.ThemeController
 import com.toblad.khwab.ui.theme.ThemeMode
 
@@ -46,18 +47,25 @@ fun ChatTopBar(
     var menuExpanded by remember { mutableStateOf(false) }
 
     val auraActive = ThemeController.currentTheme == ThemeMode.AURA
+    // fix #20: split daytime vs night Aura for the bar
+    val isDaytimeAura = auraActive && ThemeController.currentAuraTheme.timePhase in listOf(
+        TimePhase.SUNRISE, TimePhase.MORNING, TimePhase.NOON, TimePhase.AFTERNOON
+    )
 
-    val containerColor = if (auraActive)
-        colors.surface.copy(alpha = 0.72f)
-    else
-        colors.surface
+    val containerColor = when {
+        isDaytimeAura -> Color.White.copy(alpha = 0.65f)    // frosted white over bright sky
+        auraActive    -> colors.surface.copy(alpha = 0.80f)  // semi-transparent dark for night
+        else          -> colors.surface
+    }
+    // fix #20: dark text/icons on daytime frosted white bar
+    val contentColor = if (isDaytimeAura) Color(0xFF1A1A2E) else colors.onSurface
 
     TopAppBar(
         colors = TopAppBarDefaults.topAppBarColors(
             containerColor = containerColor,
-            titleContentColor = colors.onSurface,
-            navigationIconContentColor = colors.onSurface,
-            actionIconContentColor = colors.onSurface
+            titleContentColor = contentColor,
+            navigationIconContentColor = contentColor,
+            actionIconContentColor = contentColor
         ),
         navigationIcon = {
             IconButton(onClick = onBackClick) {
@@ -72,12 +80,13 @@ fun ChatTopBar(
                 verticalAlignment = Alignment.CenterVertically,
                 horizontalArrangement = Arrangement.spacedBy(8.dp)
             ) {
-                // Assistant avatar badge — matches the ChatBubble identity
+                // Assistant avatar badge — fix #23: visible on daytime frosted bar
                 Surface(
                     modifier = Modifier
                         .size(28.dp)
                         .clip(RoundedCornerShape(8.dp)),
-                    color = colors.primaryContainer
+                    color = if (isDaytimeAura) colors.primary.copy(alpha = 0.20f)
+                            else colors.primaryContainer
                 ) {
                     Box(contentAlignment = Alignment.Center) {
                         Icon(

@@ -103,7 +103,7 @@ val Typography = Typography(
         fontWeight   = FontWeight.Bold,
         fontSize     = 24.sp,
         lineHeight   = 34.sp,
-        letterSpacing = (-0.2).sp
+        letterSpacing = 0.sp              // fix #25: neutral, avoid overlap at ExtraBold weights
     ),
 
     // ── Label ────────────────────────────────────────────────────────────────
@@ -126,6 +126,6 @@ val Typography = Typography(
         fontWeight   = FontWeight.Medium,
         fontSize     = 11.sp,
         lineHeight   = 16.sp,
-        letterSpacing = 1.0.sp
+        letterSpacing = 0.6.sp            // fix #19: tighter tracking at small sizes reads better
     )
 )
