@@ -14,10 +14,13 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.safeDrawing
+import androidx.compose.foundation.layout.windowInsetsPadding
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.HorizontalDivider
@@ -31,10 +34,10 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.alpha
+import androidx.compose.ui.graphics.Brush
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.unit.dp
-import androidx.compose.foundation.layout.WindowInsets
-import androidx.compose.foundation.layout.safeDrawing
-import androidx.compose.foundation.layout.windowInsetsPadding
+import com.toblad.khwab.aura.model.TimePhase
 import com.toblad.khwab.aura.ui.AuraScene
 import com.toblad.khwab.state.AssistantState
 import com.toblad.khwab.state.AssistantStateManager
@@ -89,10 +92,30 @@ fun HomeScreen(
         label = "home_fade_in"
     )
 
+    // When Aura is off, show a time-aware gradient fallback so the home screen
+    // doesn't stay pure dark-navy during daytime. Background only — no particles.
+    val fallbackBg: Modifier = if (!auraActive) {
+        val hour = remember { java.util.Calendar.getInstance().get(java.util.Calendar.HOUR_OF_DAY) }
+        val (topC, botC) = when {
+            hour in 5..7   -> Color(0xFF1A1A3E) to Color(0xFFFF9E80)  // dawn
+            hour in 8..11  -> Color(0xFF4FC3F7) to Color(0xFFFFF8E1)  // morning
+            hour in 12..14 -> Color(0xFF1565C0) to Color(0xFFE3F2FD)  // noon
+            hour in 15..17 -> Color(0xFF0D47A1) to Color(0xFFFFF9C4)  // afternoon
+            hour in 18..20 -> Color(0xFFFF7043) to Color(0xFF5E35B1)  // sunset
+            hour in 21..22 -> Color(0xFF3949AB) to Color(0xFF7986CB)  // evening
+            else           -> Color(0xFF0D1B2A) to Color(0xFF000814)  // night
+        }
+        Modifier.background(
+            Brush.verticalGradient(listOf(topC, botC))
+        )
+    } else {
+        Modifier.background(colors.background)
+    }
+
     Box(
         modifier = Modifier
             .fillMaxSize()
-            .background(colors.background)
+            .then(fallbackBg)
             .windowInsetsPadding(WindowInsets.safeDrawing)
     ) {
         if (auraActive) {
