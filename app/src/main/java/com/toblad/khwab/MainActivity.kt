@@ -22,6 +22,7 @@ import com.toblad.khwab.aura.AuraBridge
 import com.toblad.khwab.chat.ChatActivity
 import com.toblad.khwab.logging.LogModule
 import com.toblad.khwab.logging.Logger
+import com.toblad.khwab.permission.AccessibilityPermissionHelper
 import com.toblad.khwab.permission.PermissionManager
 import com.toblad.khwab.service.VoiceService
 import com.toblad.khwab.settings.SettingsActivity
@@ -38,6 +39,14 @@ class MainActivity : ComponentActivity() {
     // onResume checks this flag to call startAssistant() once they return.
     private var pendingOverlayPermission = false
 
+    // Set to true when we navigate to Accessibility Settings so the user can
+    // enable KhwabAccessibilityService. onResume dismisses the dialog automatically
+    // if they have enabled it.
+    private var pendingAccessibilityPermission = false
+
+    // Compose state — drives the accessibility onboarding dialog.
+    private var showAccessibilityDialog by mutableStateOf(false)
+
     override fun onResume() {
         super.onResume()
         if (pendingOverlayPermission) {
@@ -47,6 +56,15 @@ class MainActivity : ComponentActivity() {
                 startAssistant()
             }
             // If still not granted, leave the user on the home screen to try again.
+        }
+
+        // If the user returned from Accessibility Settings, re-check and dismiss
+        // the onboarding dialog if they have now enabled the service.
+        if (pendingAccessibilityPermission) {
+            pendingAccessibilityPermission = false
+            if (AccessibilityPermissionHelper.isEnabledBySystem(this)) {
+                showAccessibilityDialog = false
+            }
         }
     }
 
@@ -127,6 +145,38 @@ class MainActivity : ComponentActivity() {
                     )
                 }
 
+                // Accessibility onboarding dialog — shown after assistant starts
+                // if KhwabAccessibilityService is not yet enabled.
+                if (showAccessibilityDialog) {
+                    AlertDialog(
+                        onDismissRequest = { showAccessibilityDialog = false },
+                        title = { Text("Enable Accessibility Access") },
+                        text  = {
+                            Text(
+                                "To control other apps with your voice, Khwab needs " +
+                                "Accessibility access.\n\nGo to:\n" +
+                                "Settings → Accessibility → Downloaded Apps → Khwab\n\n" +
+                                "Toggle it on, then return here."
+                            )
+                        },
+                        confirmButton = {
+                            TextButton(onClick = {
+                                pendingAccessibilityPermission = true
+                                AccessibilityPermissionHelper.openAccessibilitySettings(
+                                    this@MainActivity
+                                )
+                            }) {
+                                Text("Open Settings")
+                            }
+                        },
+                        dismissButton = {
+                            TextButton(onClick = { showAccessibilityDialog = false }) {
+                                Text("Skip for now")
+                            }
+                        }
+                    )
+                }
+
                 // On first launch the Whisper model files are not yet on disk.
                 // Show the download screen until they are ready, then show Home.
                 var modelsReady by rememberSaveable {
@@ -185,6 +235,13 @@ class MainActivity : ComponentActivity() {
         AssistantStateManager.updateState(
             AssistantState.RUNNING
         )
+
+        // Prompt the user to enable Accessibility if they haven't already.
+        // This is non-blocking — the assistant runs with or without it.
+        if (!AccessibilityPermissionHelper.isEnabledBySystem(this)) {
+            Logger.info(LogModule.ACCESSIBILITY, "Accessibility service not enabled — showing onboarding dialog")
+            showAccessibilityDialog = true
+        }
     }
 
     private fun stopAssistant() {

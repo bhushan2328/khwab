@@ -1,0 +1,29 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+    Khwab Accessibility Service configuration.
+
+    accessibilityEventTypes:
+        TYPE_WINDOW_STATE_CHANGED   — fires when a new window/screen becomes active.
+        TYPE_WINDOW_CONTENT_CHANGED — fires when visible content inside a window changes.
+        TYPE_VIEW_FOCUSED           — fires when an individual view gains focus.
+
+    accessibilityFeedbackType:
+        FEEDBACK_GENERIC — required; we produce no spoken/haptic feedback ourselves.
+
+    accessibilityFlags:
+        FLAG_RETRIEVE_INTERACTIVE_WINDOWS — allows querying content of ALL visible windows,
+        not only the one that currently has focus.
+
+    canRetrieveWindowContent:
+        Must be true for KhwabAccessibilityService to read the accessibility node tree.
+
+    packageNames is intentionally empty — we want to observe all foreground apps.
+    If you need to restrict to specific apps in the future, add a comma-separated list here.
+-->
+<accessibility-service xmlns:android="http://schemas.android.com/apk/res/android"
+    android:accessibilityEventTypes="typeWindowStateChanged|typeWindowContentChanged|typeViewFocused"
+    android:accessibilityFeedbackType="feedbackGeneric"
+    android:accessibilityFlags="flagRetrieveInteractiveWindows"
+    android:canRetrieveWindowContent="true"
+    android:description="@string/accessibility_service_description"
+    android:notificationTimeout="100" />

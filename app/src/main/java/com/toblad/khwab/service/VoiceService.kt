@@ -13,6 +13,8 @@ import com.toblad.khwab.di.KhwabProvider
 import com.toblad.khwab.executor.AndroidExecutionEngine
 import com.toblad.khwab.integration.api.KhwabIntegration
 import com.toblad.khwab.integration.api.request.IntegrationRequest
+import com.toblad.khwab.logging.LogModule
+import com.toblad.khwab.logging.Logger
 import com.toblad.khwab.overlay.FloatingWindow
 import com.toblad.khwab.speech.SpeechManager
 import com.toblad.khwab.state.AssistantState
@@ -94,8 +96,25 @@ class VoiceService : Service() {
                     }
 
                     serviceScope.launch {
+                        // Capture the current screen before processing.
+                        // AccessibilityTreeMapper returns null when the service is not
+                        // enabled — the pipeline handles null gracefully.
+                        val screenSnapshot = AccessibilityTreeMapper.capture()
+                        if (screenSnapshot != null) {
+                            Logger.info(
+                                LogModule.ACCESSIBILITY,
+                                "Screen captured: pkg=${screenSnapshot.packageName} " +
+                                "elements=${screenSnapshot.allElements().size}"
+                            )
+                        }
+
                         val response = try {
-                            integration.process(IntegrationRequest(input = result.text))
+                            integration.process(
+                                IntegrationRequest(
+                                    input = result.text,
+                                    screenContext = screenSnapshot
+                                )
+                            )
                         } catch (e: Exception) {
                             withContext(Dispatchers.Main) {
                                 floatingWindow.setState(AssistantState.ERROR)
@@ -105,7 +124,7 @@ class VoiceService : Service() {
                             return@launch
                         }
 
-                        // Execute Android-side command (open app, call, etc.)
+                        // Execute Android-side command (open app, accessibility action, etc.)
                         response.executionPlan?.let { plan ->
                             Log.d("Khwab", "Executing: ${plan.action}")
                             withContext(Dispatchers.Main) {
@@ -116,8 +135,19 @@ class VoiceService : Service() {
                             Log.d("Khwab", "Execution done")
                         }
 
-                        // Speak the response text back to the user
-                        val responseText = response.message
+                        // For READ_SCREEN: if the AccessibilityService captured screen text,
+                        // use that as the spoken response (overrides any generic Core message).
+                        val screenReadText = KhwabAccessibilityService.instance.get()
+                            ?.lastScreenReadResult
+                            ?.also {
+                                // Consume the result so it isn't re-spoken next turn.
+                                KhwabAccessibilityService.instance.get()?.lastScreenReadResult = null
+                            }
+
+                        // Speak the response text back to the user.
+                        // Priority: screen-read text > Core response message.
+                        val responseText = screenReadText?.takeIf { it.isNotBlank() }
+                            ?: response.message
                         if (!responseText.isNullOrBlank() && response.success) {
                             withContext(Dispatchers.Main) {
                                 floatingWindow.setState(AssistantState.SPEAKING)

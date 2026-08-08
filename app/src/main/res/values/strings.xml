@@ -1,3 +1,4 @@
 <resources>
     <string name="app_name">Khwab</string>
+    <string name="accessibility_service_description">Allows Khwab to read the current screen and perform actions in other apps on your behalf.</string>
 </resources>

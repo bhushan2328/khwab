@@ -10,6 +10,9 @@ class ExecutorRegistry(
 
     private val executors: List<AndroidExecutor> = listOf(
 
+        // Screen / UI interaction via KhwabAccessibilityService
+        AccessibilityExecutor(),
+
         // Aura Commands
         AuraExecutor(context),
 
