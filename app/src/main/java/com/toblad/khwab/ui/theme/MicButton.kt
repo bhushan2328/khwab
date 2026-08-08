@@ -164,6 +164,18 @@ fun MicButton(
                 onClick()
             }
         ) {
+            // In daytime Aura mode the mic edge fades to transparent instead of
+            // dark navy so the sky shows through naturally behind the button.
+            val auraActive2 = ThemeController.currentTheme == ThemeMode.AURA
+            val isDaytimeMic = auraActive2 && ThemeController.currentAuraTheme.timePhase in listOf(
+                com.toblad.khwab.aura.model.TimePhase.SUNRISE,
+                com.toblad.khwab.aura.model.TimePhase.MORNING,
+                com.toblad.khwab.aura.model.TimePhase.NOON,
+                com.toblad.khwab.aura.model.TimePhase.AFTERNOON
+            )
+            val gradientEdge = if (isDaytimeMic) androidx.compose.ui.graphics.Color.Transparent
+                               else colors.background
+
             Box(
                 modifier = Modifier
                     .fillMaxSize()
@@ -173,7 +185,7 @@ fun MicButton(
                             colors = listOf(
                                 colors.primaryContainer,
                                 colors.primary,
-                                colors.background
+                                gradientEdge
                             )
                         )
                     ),

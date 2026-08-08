@@ -14,6 +14,7 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
@@ -24,11 +25,13 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import com.toblad.khwab.aura.model.TimePhase
 import com.toblad.khwab.di.UserProfileStore
 import kotlinx.coroutines.delay
 import java.text.SimpleDateFormat
@@ -49,9 +52,8 @@ fun HeaderSection() {
         }
     }
 
-    // ── Static values: computed once, never need re-updating mid-session ─────
+    // ── Static values ─────────────────────────────────────────────────────────
     val rawName = remember { UserProfileStore.getDisplayName(context) }
-    // Fall back to "Friend" so the greeting never feels cold/empty
     val displayName = remember { rawName.ifBlank { "Friend" } }
     val avatarInitial = remember { displayName.firstOrNull()?.uppercaseChar()?.toString() ?: "K" }
 
@@ -68,10 +70,33 @@ fun HeaderSection() {
         SimpleDateFormat("dd MMMM yyyy", Locale.getDefault()).format(initialCalendar.time)
     }
 
-    // ── Time string: recomputed every second from currentTime ─────────────────
     val time = SimpleDateFormat("hh:mm:ss a", Locale.getDefault()).format(currentTime)
 
     val colors = MaterialTheme.colorScheme
+
+    // ── Aura daytime awareness ────────────────────────────────────────────────
+    val auraActive = ThemeController.currentTheme == ThemeMode.AURA
+    val timePhase  = ThemeController.currentAuraTheme.timePhase
+
+    val isDaytime  = auraActive && timePhase in listOf(
+        TimePhase.SUNRISE, TimePhase.MORNING, TimePhase.NOON, TimePhase.AFTERNOON
+    )
+
+    // When rendering over a bright daytime sky, swap to white text so the
+    // header stays readable regardless of sky brightness.
+    val greetingColor = if (isDaytime) Color.White else colors.onBackground
+    val nameColor     = if (isDaytime) Color.White.copy(alpha = 0.88f) else colors.onSurfaceVariant
+    val dateColor     = if (isDaytime) Color.White.copy(alpha = 0.78f) else colors.onSurfaceVariant
+    val clockColor    = if (isDaytime) Color.White else colors.primary
+
+    // Avatar badge: frosted semi-transparent in daytime, solid otherwise
+    val avatarBg = if (isDaytime)
+        Color.White.copy(alpha = 0.28f) else colors.primaryContainer
+    val avatarTextColor = if (isDaytime) Color.White else colors.onPrimaryContainer
+
+    // Subtle dark scrim behind text so white text always has contrast,
+    // even on very bright skies (the scrim is invisible in dark mode)
+    val textScrim = if (isDaytime) Color.Black.copy(alpha = 0.12f) else Color.Transparent
 
     Row(
         modifier = Modifier.fillMaxWidth(),
@@ -83,19 +108,16 @@ fun HeaderSection() {
             verticalAlignment = Alignment.CenterVertically,
             horizontalArrangement = Arrangement.spacedBy(12.dp)
         ) {
-            // Circular avatar badge with user initial
+            // Circular avatar badge
             Box(
                 modifier = Modifier
                     .size(48.dp)
-                    .background(
-                        color = colors.primaryContainer,
-                        shape = CircleShape
-                    ),
+                    .background(color = avatarBg, shape = CircleShape),
                 contentAlignment = Alignment.Center
             ) {
                 Text(
                     text = avatarInitial,
-                    color = colors.onPrimaryContainer,
+                    color = avatarTextColor,
                     fontSize = 20.sp,
                     fontWeight = FontWeight.Bold
                 )
@@ -109,36 +131,43 @@ fun HeaderSection() {
                     },
                     label = "greeting_anim"
                 ) { greetingText ->
-                    Text(
-                        text = greetingText,
-                        color = colors.onBackground,
-                        fontSize = 24.sp,
-                        fontWeight = FontWeight.Bold
-                    )
+                    // Scrim pill behind greeting text for contrast over bright skies
+                    Box(
+                        modifier = Modifier
+                            .background(textScrim, RoundedCornerShape(6.dp))
+                            .padding(horizontal = if (isDaytime) 4.dp else 0.dp)
+                    ) {
+                        Text(
+                            text = greetingText,
+                            color = greetingColor,
+                            fontSize = 24.sp,
+                            fontWeight = FontWeight.Bold
+                        )
+                    }
                 }
                 Text(
                     text = displayName,
-                    color = colors.onSurfaceVariant,
+                    color = nameColor,
                     fontSize = 16.sp,
                     fontWeight = FontWeight.Medium
                 )
             }
         }
 
-        // ── Right: date (static) + live clock (monospace, primary tint) ───────
+        // ── Right: date + live clock ──────────────────────────────────────────
         Column(
             horizontalAlignment = Alignment.End,
             modifier = Modifier.padding(top = 4.dp)
         ) {
             Text(
                 text = date,
-                color = colors.onSurfaceVariant,
+                color = dateColor,
                 fontSize = 13.sp,
                 fontWeight = FontWeight.Medium
             )
             Text(
                 text = time,
-                color = colors.primary,
+                color = clockColor,
                 fontSize = 19.sp,
                 fontWeight = FontWeight.Bold,
                 fontFamily = FontFamily.Monospace

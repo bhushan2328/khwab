@@ -38,6 +38,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import com.toblad.khwab.aura.model.TimePhase
 import com.toblad.khwab.state.AssistantState
 import com.toblad.khwab.state.AssistantStateManager
 
@@ -86,13 +87,27 @@ fun StatusCard(
         label = "dot_alpha"
     )
 
+    // When Aura is active over a bright daytime sky the card must stay readable.
+    // Use a semi-transparent frosted surface so the sky shows through subtly,
+    // and keep text/border contrast with a white-tinted base.
+    val auraActive = ThemeController.currentTheme == ThemeMode.AURA
+    val timePhase  = ThemeController.currentAuraTheme.timePhase
+    val isDaytime  = auraActive && timePhase in listOf(
+        TimePhase.SUNRISE, TimePhase.MORNING, TimePhase.NOON, TimePhase.AFTERNOON
+    )
+
+    val cardContainer = if (isDaytime)
+        Color.White.copy(alpha = 0.78f)   // frosted glass over bright sky
+    else
+        lerp(colors.surfaceVariant, animatedBgTint, 0.5f)
+
+    val labelColor   = if (isDaytime) animatedBorderColor else animatedBorderColor
+    val messageColor = if (isDaytime) Color(0xFF1f2328) else colors.onSurfaceVariant
+
     Card(
         modifier = Modifier.fillMaxWidth(),
         shape = RoundedCornerShape(24.dp),
-        colors = CardDefaults.cardColors(
-            // Subtle state-colored tint over the surface variant
-            containerColor = lerp(colors.surfaceVariant, animatedBgTint, 0.5f)
-        ),
+        colors = CardDefaults.cardColors(containerColor = cardContainer),
         elevation = CardDefaults.cardElevation(defaultElevation = 6.dp)
     ) {
         Row(modifier = Modifier.height(IntrinsicSize.Min)) {
@@ -133,7 +148,7 @@ fun StatusCard(
 
                 Text(
                     text = status.replace("_", " ").uppercase(),
-                    color = animatedBorderColor,
+                    color = labelColor,
                     style = MaterialTheme.typography.labelLarge,
                     fontWeight = FontWeight.Bold,
                     letterSpacing = 1.5.sp
@@ -143,7 +158,7 @@ fun StatusCard(
 
                 Text(
                     text = message,
-                    color = colors.onSurfaceVariant,
+                    color = messageColor,
                     style = MaterialTheme.typography.bodyMedium,
                     textAlign = TextAlign.Center
                 )
