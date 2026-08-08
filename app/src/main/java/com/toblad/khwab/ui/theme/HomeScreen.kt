@@ -74,13 +74,13 @@ fun HomeScreen(
 
     val statusColor = when (assistantState) {
         AssistantState.STOPPED   -> colors.error
-        AssistantState.READY     -> colors.primary
-        AssistantState.RUNNING   -> colors.secondary
-        AssistantState.LISTENING -> colors.primary
-        AssistantState.THINKING  -> colors.tertiary
-        AssistantState.EXECUTING -> colors.secondary
-        AssistantState.SPEAKING  -> colors.primary
         AssistantState.ERROR     -> colors.error
+        AssistantState.READY     -> KhwabBlue
+        AssistantState.RUNNING   -> KhwabListening
+        AssistantState.LISTENING -> KhwabListening
+        AssistantState.THINKING  -> KhwabProcessing
+        AssistantState.EXECUTING -> KhwabExecuting
+        AssistantState.SPEAKING  -> KhwabSpeaking
     }
 
     // Fade-in on first composition
@@ -97,13 +97,13 @@ fun HomeScreen(
     val fallbackBg: Modifier = if (!auraActive) {
         val hour = remember { java.util.Calendar.getInstance().get(java.util.Calendar.HOUR_OF_DAY) }
         val (topC, botC) = when {
-            hour in 5..7   -> Color(0xFF1A1A3E) to Color(0xFFFF9E80)  // dawn
-            hour in 8..11  -> Color(0xFF4FC3F7) to Color(0xFFFFF8E1)  // morning
-            hour in 12..14 -> Color(0xFF1565C0) to Color(0xFFE3F2FD)  // noon
-            hour in 15..17 -> Color(0xFF0D47A1) to Color(0xFFFFF9C4)  // afternoon
-            hour in 18..20 -> Color(0xFFFF7043) to Color(0xFF5E35B1)  // sunset
-            hour in 21..22 -> Color(0xFF3949AB) to Color(0xFF7986CB)  // evening
-            else           -> Color(0xFF0D1B2A) to Color(0xFF000814)  // night
+            hour in 5..7   -> Color(0xFF0D1433) to Color(0xFF3D2B1F)  // pre-dawn: deep blue to warm dark
+            hour in 8..11  -> Color(0xFF0A1628) to Color(0xFF1A3A5C)  // morning: deep ocean blue
+            hour in 12..14 -> Color(0xFF0C1A2E) to Color(0xFF163354)  // noon: navy depth
+            hour in 15..17 -> Color(0xFF0E1830) to Color(0xFF2A1B3D)  // afternoon: blue-purple
+            hour in 18..20 -> Color(0xFF1A0E2E) to Color(0xFF3D1A12)  // sunset: deep violet-red
+            hour in 21..22 -> Color(0xFF090D1A) to Color(0xFF131B2E)  // evening: near-black blue
+            else           -> Color(0xFF040608) to Color(0xFF080D14)  // night: true OLED dark
         }
         Modifier.background(
             Brush.verticalGradient(listOf(topC, botC))
