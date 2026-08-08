@@ -31,7 +31,11 @@ class PermissionManager(
 
             // Needed so Khwab Aura can tint the theme using
             // the device's actual location + live weather.
-            Manifest.permission.ACCESS_COARSE_LOCATION
+            Manifest.permission.ACCESS_COARSE_LOCATION,
+
+            // Needed so CallExecutor can resolve a spoken contact
+            // name to a phone number via ContactsContract.
+            Manifest.permission.READ_CONTACTS
         )
 
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {

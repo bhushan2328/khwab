@@ -208,33 +208,44 @@ class VoiceService : Service() {
 
         // ── Execute all plan steps in order ──────────────────────────────────
         if (response.success) {
-            response.executionPlan?.let { plan ->
-                Log.d(TAG, "Executing: ${plan.action}")
+            // Use executionPlans (all steps) — fall back to single executionPlan for
+            // backwards compatibility if executionPlans is somehow empty.
+            val plans = response.executionPlans.ifEmpty {
+                listOfNotNull(response.executionPlan)
+            }
+
+            if (plans.isNotEmpty()) {
                 withContext(Dispatchers.Main) {
                     floatingWindow.setState(AssistantState.EXECUTING)
                     AssistantStateManager.updateState(AssistantState.EXECUTING)
                 }
 
-                // Check if this is a screen action but accessibility is not enabled.
-                val isScreenAction = plan.action in setOf(
+                val screenActions = setOf(
                     "CLICK", "LONG_CLICK", "SCROLL", "TYPE_TEXT",
                     "GO_BACK", "GO_HOME", "READ_SCREEN", "FIND_ELEMENT", "FOCUS_ELEMENT"
                 )
-                if (isScreenAction && KhwabAccessibilityService.instance.get() == null) {
-                    speak(
-                        "Please enable Khwab in Settings, then Accessibility, " +
-                        "to use screen actions."
-                    )
-                    withContext(Dispatchers.Main) {
-                        val settingsIntent = Intent(Settings.ACTION_ACCESSIBILITY_SETTINGS).apply {
-                            addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+
+                for (plan in plans) {
+                    Log.d(TAG, "Executing step: ${plan.action}")
+
+                    val isScreenAction = plan.action in screenActions
+                    if (isScreenAction && KhwabAccessibilityService.instance.get() == null) {
+                        speak(
+                            "Please enable Khwab in Settings, then Accessibility, " +
+                            "to use screen actions."
+                        )
+                        withContext(Dispatchers.Main) {
+                            val settingsIntent = Intent(Settings.ACTION_ACCESSIBILITY_SETTINGS).apply {
+                                addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+                            }
+                            startActivity(settingsIntent)
                         }
-                        startActivity(settingsIntent)
+                        break  // No point executing further steps without accessibility
+                    } else {
+                        val success = executionEngine.execute(plan)
+                        Log.d(TAG, "Step done: action=${plan.action} success=$success")
+                        delay(STEP_DELAY_MS)
                     }
-                } else {
-                    val success = executionEngine.execute(plan)
-                    Log.d(TAG, "Execution done: success=$success")
-                    delay(STEP_DELAY_MS)
                 }
             }
         }
@@ -306,8 +317,9 @@ class VoiceService : Service() {
             )
 
             // Pass the last N voice turns as conversation history so Gemini
-            // can answer follow-up questions correctly.
-            val history = buildVoiceHistory()
+            // can answer follow-up questions correctly. Uses the clean interface
+            // method — no reflection, works in release builds with R8/ProGuard.
+            val history = integration.conversationHistory()
             val prompt = promptBuilder.buildPrimary(query, conversationHistory = history)
             val llmResponse = llmService.generate(prompt, "gemini-2.0-flash") ?: return null
 
@@ -321,35 +333,6 @@ class VoiceService : Service() {
         } catch (e: Exception) {
             Log.e(TAG, "Gemini fetch failed: ${e.message}")
             null
-        }
-    }
-
-    /**
-     * Returns the last 6 voice turns as (role, text) pairs for Gemini context.
-     */
-    private fun buildVoiceHistory(): List<Pair<String, String>> {
-        return try {
-            val bridge = integration as? com.toblad.khwab.integration.internal.DefaultKhwabIntegration
-                ?: return emptyList()
-            val field = bridge.javaClass.getDeclaredField("coreBridge")
-            field.isAccessible = true
-            val coreBridge = field.get(bridge)
-                as? com.toblad.khwab.integration.bridge.core.DefaultCoreBridge
-                ?: return emptyList()
-            val coordField = coreBridge.javaClass.getDeclaredField("coordinator")
-            coordField.isAccessible = true
-            val coordinator = coordField.get(coreBridge)
-                as? com.toblad.khwab.core.brain.CognitiveCoordinator
-                ?: return emptyList()
-            coordinator.brain().conversationEngine.session.history
-                .all()
-                .takeLast(12)
-                .mapIndexed { idx, text ->
-                    val role = if (idx % 2 == 0) "User" else "Khwab"
-                    role to text
-                }
-        } catch (_: Exception) {
-            emptyList()
         }
     }
 
