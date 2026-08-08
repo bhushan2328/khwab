@@ -7,7 +7,12 @@ import android.provider.Settings
 import android.speech.tts.TextToSpeech
 import android.speech.tts.UtteranceProgressListener
 import android.util.Log
+import com.toblad.khwab.chat.model.ChatMessage
+import com.toblad.khwab.chat.model.MessageState
+import com.toblad.khwab.chat.model.MessageStatus
+import com.toblad.khwab.chat.model.Sender
 import com.toblad.khwab.db.KhwabDatabase
+import com.toblad.khwab.db.entity.ChatMessageEntity
 import com.toblad.khwab.db.repository.RoomTemporaryKnowledgeRepository
 import com.toblad.khwab.di.KhwabProvider
 import com.toblad.khwab.executor.AndroidExecutionEngine
@@ -30,14 +35,21 @@ import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import java.util.Locale
+import java.util.concurrent.atomic.AtomicLong
 
 class VoiceService : Service() {
 
     companion object {
         private const val TAG = "VoiceService"
         private const val NOTIFICATION_ID = 1001
-        /** Pause between consecutive plan steps so Android UI has time to react. */
+        /** Pause between consecutive plan steps that do NOT change the screen. */
         private const val STEP_DELAY_MS = 600L
+        /**
+         * Extra wait after a step that triggers a screen transition
+         * (app launch, click, back, etc.) so the new UI has time to settle
+         * before AccessibilityTreeMapper captures the fresh snapshot.
+         */
+        private const val SCREEN_SETTLE_MS = 1200L
         /** Gemini model used for voice-path direct fetches. */
         const val GEMINI_MODEL = "gemini-2.0-flash"
     }
@@ -66,6 +78,11 @@ class VoiceService : Service() {
             KhwabDatabase.getInstance(applicationContext).temporaryKnowledgeDao()
         )
     }
+    private val chatMessageDao by lazy {
+        KhwabDatabase.getInstance(applicationContext).chatMessageDao()
+    }
+    private val msgIdCounter = AtomicLong(System.currentTimeMillis())
+    private fun nextMsgId() = msgIdCounter.incrementAndGet()
 
     override fun onCreate() {
         super.onCreate()
@@ -213,7 +230,51 @@ class VoiceService : Service() {
 
     // ── Core voice processing ─────────────────────────────────────────────────
 
+    /**
+     * When a destructive confirmation is pending this holds the original command text.
+     * The next "yes" response executes it; any other response cancels it.
+     */
+    @Volatile private var pendingConfirmationCommand: String? = null
+
     private suspend fun processVoiceInput(text: String) {
+
+        // ── Confirmation reply handling ───────────────────────────────────────
+        // If the previous response required confirmation, the user's current utterance
+        // is the answer. "yes" / "yeah" / "do it" → re-run the original command.
+        // Anything else → cancel.
+        val pendingCmd = pendingConfirmationCommand
+        if (pendingCmd != null) {
+            pendingConfirmationCommand = null
+            val lower = text.trim().lowercase()
+            val confirmed = lower == "yes" || lower == "yeah" || lower == "do it" ||
+                            lower == "confirm" || lower == "proceed" || lower == "ok" ||
+                            lower == "okay" || lower.startsWith("yes ")
+            if (confirmed) {
+                Log.d(TAG, "Confirmation received — re-running: $pendingCmd")
+                processVoiceInput(pendingCmd)
+                return
+            } else {
+                val cancelMsg = "Action cancelled."
+                persistKhwabMessage(cancelMsg)
+                speak(cancelMsg)
+                return
+            }
+        }
+
+        // Persist the user's spoken query to Room so chat history is complete.
+        val userMsgId = nextMsgId()
+        try {
+            chatMessageDao.upsert(
+                ChatMessageEntity(
+                    id = userMsgId,
+                    text = text,
+                    sender = Sender.USER.name,
+                    timestamp = System.currentTimeMillis(),
+                    status = MessageStatus.SENT.name,
+                    state = MessageState.COMPLETE.name
+                )
+            )
+        } catch (_: Exception) { /* non-fatal */ }
 
         // Capture the live screen snapshot before processing.
         val screenSnapshot = AccessibilityTreeMapper.capture()
@@ -244,7 +305,21 @@ class VoiceService : Service() {
             return
         }
 
-        // ── Execute all plan steps in order ──────────────────────────────────
+        // ── Safety confirmation gate ──────────────────────────────────────────
+        if (response.requiresConfirmation) {
+            val prompt = response.confirmationPrompt
+                ?: "This action may be irreversible. Do you want me to continue?"
+            pendingConfirmationCommand = text
+            persistKhwabMessage(prompt)
+            withContext(Dispatchers.Main) {
+                floatingWindow.setState(AssistantState.SPEAKING)
+                AssistantStateManager.updateState(AssistantState.SPEAKING)
+            }
+            speak(prompt)
+            return
+        }
+
+        // ── Execute all plan steps in order with closed-loop screen re-read ───
         if (response.success) {
             val plans = response.executionPlans.ifEmpty {
                 listOfNotNull(response.executionPlan)
@@ -256,16 +331,17 @@ class VoiceService : Service() {
                     AssistantStateManager.updateState(AssistantState.EXECUTING)
                 }
 
-                val screenActions = setOf(
-                    "CLICK", "LONG_CLICK", "SCROLL", "TYPE_TEXT",
-                    "GO_BACK", "GO_HOME", "READ_SCREEN", "FIND_ELEMENT", "FOCUS_ELEMENT"
+                val accessibilityActions = setOf(
+                    "CLICK", "LONG_CLICK", "SCROLL", "SCROLL_TO_TOP", "SCROLL_TO_BOTTOM",
+                    "SWIPE", "TYPE_TEXT", "GO_BACK", "GO_HOME",
+                    "READ_SCREEN", "FIND_ELEMENT", "FOCUS_ELEMENT"
                 )
 
                 for (plan in plans) {
                     Log.d(TAG, "Executing step: ${plan.action}")
 
-                    val isScreenAction = plan.action in screenActions
-                    if (isScreenAction && KhwabAccessibilityService.instance.get() == null) {
+                    val isAccessibilityAction = plan.action in accessibilityActions
+                    if (isAccessibilityAction && KhwabAccessibilityService.instance.get() == null) {
                         speak(
                             "Please enable Khwab in Settings, then Accessibility, " +
                             "to use screen actions."
@@ -277,15 +353,33 @@ class VoiceService : Service() {
                             startActivity(settingsIntent)
                         }
                         break
-                    } else {
-                        val success = executionEngine.execute(plan)
-                        Log.d(TAG, "Step done: action=${plan.action} success=$success")
+                    }
 
-                        // Speak feedback when a screen action fails silently.
-                        if (!success && isScreenAction) {
-                            speak("Couldn't find that button. Try saying it differently.")
+                    val success = executionEngine.execute(plan)
+                    Log.d(TAG, "Step done: action=${plan.action} success=$success")
+
+                    // Error recovery: speak feedback on failure but do not retry here —
+                    // AccessibilityExecutor already does one retry internally.
+                    if (!success && isAccessibilityAction) {
+                        speak("Couldn't complete that step. Moving on.")
+                    }
+
+                    // Closed-loop: if this step might have changed the screen, wait for
+                    // the new UI to settle then re-capture the accessibility snapshot.
+                    // The fresh snapshot is logged but not re-sent to Core mid-plan
+                    // (Core has already planned all steps); it is available for the
+                    // next user command via AccessibilityTreeMapper.capture().
+                    if (plan.requiresScreenRefresh) {
+                        delay(SCREEN_SETTLE_MS)
+                        val fresh = AccessibilityTreeMapper.capture()
+                        if (fresh != null) {
+                            Logger.info(
+                                LogModule.ACCESSIBILITY,
+                                "Screen refreshed after ${plan.action}: " +
+                                "pkg=${fresh.packageName} elements=${fresh.allElements().size}"
+                            )
                         }
-
+                    } else {
                         delay(STEP_DELAY_MS)
                     }
                 }
@@ -304,6 +398,7 @@ class VoiceService : Service() {
                 floatingWindow.setState(AssistantState.SPEAKING)
                 AssistantStateManager.updateState(AssistantState.SPEAKING)
             }
+            persistKhwabMessage(responseText)
             speak(responseText)
         }
 
@@ -315,12 +410,13 @@ class VoiceService : Service() {
                 floatingWindow.setState(AssistantState.THINKING)
                 AssistantStateManager.updateState(AssistantState.THINKING)
             }
-            val geminiAnswer = fetchGeminiAnswer(query)
+            val geminiAnswer = fetchGeminiAnswer(query, text)
             if (!geminiAnswer.isNullOrBlank()) {
                 withContext(Dispatchers.Main) {
                     floatingWindow.setState(AssistantState.SPEAKING)
                     AssistantStateManager.updateState(AssistantState.SPEAKING)
                 }
+                persistKhwabMessage(geminiAnswer)
                 speak(geminiAnswer)
             } else {
                 speak("I couldn't find an answer right now. Please try again.")
@@ -341,14 +437,50 @@ class VoiceService : Service() {
     // ── Gemini direct fetch (voice path) ─────────────────────────────────────
 
     /**
+     * Persists a Khwab reply to Room so the chat screen shows voice interactions.
+     */
+    private suspend fun persistKhwabMessage(text: String) {
+        try {
+            chatMessageDao.upsert(
+                ChatMessageEntity(
+                    id = nextMsgId(),
+                    text = text,
+                    sender = Sender.KHWAB.name,
+                    timestamp = System.currentTimeMillis(),
+                    status = MessageStatus.SENT.name,
+                    state = MessageState.COMPLETE.name
+                )
+            )
+        } catch (_: Exception) { /* non-fatal */ }
+    }
+
+    /**
+     * Builds conversation history from Room (last 12 messages, both roles).
+     * Mirrors the ChatViewModel approach so voice and chat share the same history.
+     */
+    private suspend fun buildRoomHistory(): List<Pair<String, String>> {
+        return try {
+            chatMessageDao.loadAll()
+                .takeLast(12)
+                .filter { it.state == MessageState.COMPLETE.name }
+                .map { msg ->
+                    val role = if (msg.sender == Sender.USER.name) "User" else "Khwab"
+                    role to msg.text
+                }
+        } catch (_: Exception) {
+            emptyList()
+        }
+    }
+
+    /**
      * Calls Gemini directly, waits for the answer, speaks it, and caches it
      * in the temporary knowledge store (30-day TTL).
      *
      * Uses lazy singleton objects — no allocations on repeated calls.
      */
-    private suspend fun fetchGeminiAnswer(query: String): String? {
+    private suspend fun fetchGeminiAnswer(query: String, originalText: String = query): String? {
         return try {
-            val history = integration.conversationHistory()
+            val history = buildRoomHistory()
             val prompt = promptBuilder.buildPrimary(query, conversationHistory = history)
             val llmResponse = llmService.generate(prompt, GEMINI_MODEL) ?: return null
 

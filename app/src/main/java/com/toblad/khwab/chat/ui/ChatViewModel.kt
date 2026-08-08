@@ -26,6 +26,7 @@ import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.collect
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
@@ -35,6 +36,13 @@ import java.util.concurrent.atomic.AtomicLong
 class ChatViewModel(
     application: Application
 ) : AndroidViewModel(application) {
+
+    companion object {
+        /** Delay between plan steps that do not change the screen. */
+        private const val STEP_DELAY_MS = 600L
+        /** Delay after a step that triggers a screen transition. */
+        private const val SCREEN_SETTLE_MS = 1200L
+    }
 
     private val idCounter = AtomicLong(System.currentTimeMillis())
     private fun nextId() = idCounter.incrementAndGet()
@@ -72,21 +80,34 @@ class ChatViewModel(
     private var lastAnswerQuery: String? = null
 
     init {
-        // Load persisted messages from Room on startup
+        // Observe Room messages reactively — this handles both initial load and
+        // live updates from VoiceService writing turns while chat is open.
         viewModelScope.launch {
-            val saved = chatMessageDao.loadAll().map { it.toChatMessage() }
-            val messages = if (saved.isEmpty()) {
-                listOf(
-                    ChatMessage(
+            chatMessageDao.observeAll().collect { entities ->
+                val messages = entities.map { it.toChatMessage() }
+                if (messages.isEmpty()) {
+                    // Seed the welcome message on first launch
+                    val welcome = ChatMessage(
                         id = nextId(),
                         text = "Hello Mr. Bhushan! I'm Khwab. How can I help you today?",
                         sender = Sender.KHWAB
-                    ).also { msg ->
-                        chatMessageDao.upsert(msg.toEntity())
+                    )
+                    chatMessageDao.upsert(welcome.toEntity())
+                    // Room Flow will emit again with the seeded message — no manual update needed
+                } else {
+                    // Merge: keep isNew/isTyping state for in-flight messages already in UI
+                    val inFlight = _uiState.value.messages
+                        .filter { it.isNew }
+                        .associateBy { it.id }
+                    val merged = messages.map { msg ->
+                        inFlight[msg.id]?.let { live -> msg.copy(isNew = live.isNew) } ?: msg
                     }
-                )
-            } else saved
-            _uiState.update { it.copy(messages = messages) }
+                    _uiState.update { state ->
+                        // Don't overwrite isTyping — it is managed by sendMessage/observeAcquisition
+                        state.copy(messages = merged)
+                    }
+                }
+            }
         }
     }
 
@@ -94,9 +115,34 @@ class ChatViewModel(
         _uiState.update { it.copy(input = text) }
     }
 
+    /**
+     * When a destructive confirmation is pending, holds the original command.
+     * The next message is treated as the confirmation answer.
+     */
+    private var pendingConfirmationInput: String? = null
+
     fun sendMessage() {
         val input = uiState.value.input.trim()
         if (input.isBlank()) return
+
+        // ── Confirmation reply handling ───────────────────────────────────────
+        val pendingCmd = pendingConfirmationInput
+        if (pendingCmd != null) {
+            pendingConfirmationInput = null
+            _uiState.update { it.copy(input = "") }
+            val lower = input.lowercase()
+            val confirmed = lower == "yes" || lower == "yeah" || lower == "do it" ||
+                lower == "confirm" || lower == "proceed" || lower == "ok" ||
+                lower == "okay" || lower.startsWith("yes ")
+            if (confirmed) {
+                // Re-submit the original command as if it were typed freshly.
+                _uiState.update { it.copy(input = pendingCmd) }
+                sendMessage()
+            } else {
+                appendKhwabMessage("Action cancelled.")
+            }
+            return
+        }
 
         // Short-circuit: "remember this" saves the last answer permanently
         if (isRememberThisCommand(input) && lastAnswerForMemory != null) {
@@ -124,6 +170,16 @@ class ChatViewModel(
             delay(300)
 
             val response = chatEngine.process(input)
+
+            // ── Safety confirmation gate ──────────────────────────────────────
+            if (response.requiresConfirmation) {
+                val prompt = response.confirmationPrompt
+                    ?: "This action may be irreversible. Do you want me to continue?"
+                pendingConfirmationInput = input
+                appendKhwabMessage(prompt)
+                _uiState.update { it.copy(isTyping = false) }
+                return@launch
+            }
 
             val replyText = if (response.success) {
                 response.message ?: "I'm not sure how to respond."
@@ -186,7 +242,26 @@ class ChatViewModel(
             }
 
             if (response.success) {
-                response.executionPlan?.let { plan -> executionEngine.execute(plan) }
+                // ── Execute ALL plan steps in order with closed-loop delays ───
+                val plans = response.executionPlans.ifEmpty {
+                    listOfNotNull(response.executionPlan)
+                }
+                if (plans.isNotEmpty()) {
+                    for (plan in plans) {
+                        try {
+                            executionEngine.execute(plan)
+                        } catch (_: Exception) { }
+
+                        // Mirror VoiceService closed-loop: wait longer after steps
+                        // that trigger a screen transition so the next step doesn't
+                        // fire against a stale UI.
+                        if (plan.requiresScreenRefresh) {
+                            delay(SCREEN_SETTLE_MS)
+                        } else {
+                            delay(STEP_DELAY_MS)
+                        }
+                    }
+                }
 
                 response.forgetLearnedKey?.let { key ->
                     viewModelScope.launch {
@@ -197,6 +272,19 @@ class ChatViewModel(
                 }
             }
         }
+    }
+
+    /** Appends a Khwab reply bubble to both Room and in-memory UI state. */
+    private fun appendKhwabMessage(text: String) {
+        val msg = ChatMessage(
+            id = nextId(),
+            text = text,
+            sender = Sender.KHWAB,
+            status = MessageStatus.SENT,
+            state = MessageState.COMPLETE
+        )
+        viewModelScope.launch { chatMessageDao.upsert(msg.toEntity()) }
+        _uiState.update { state -> state.copy(messages = state.messages + msg) }
     }
 
     /**

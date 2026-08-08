@@ -100,14 +100,13 @@ class KhwabAccessibilityService : AccessibilityService() {
 
     /**
      * Walks the accessibility node tree of the currently-active window and
-     * collects all non-blank visible text + content descriptions.
+     * produces a human-readable summary of what is visible on screen.
      *
-     * Returns a newline-separated string suitable for display or TTS.
+     * Rather than dumping every raw node string, the summary groups elements
+     * by semantic role (headings, buttons, editable fields, links, text) and
+     * presents them in plain English suitable for TTS.
+     *
      * Returns null if the service has no accessible window root.
-     *
-     * Note: [AccessibilityNodeInfo.recycle] is deprecated on API 33+ (nodes are
-     * managed automatically), but is still required on older API levels.
-     * The @Suppress annotation silences the warning across both paths.
      */
     @Suppress("DEPRECATION")
     fun captureScreenText(): String? {
@@ -116,26 +115,84 @@ class KhwabAccessibilityService : AccessibilityService() {
             return null
         }
 
-        val lines = mutableListOf<String>()
-        collectText(root, lines)
+        val collected = mutableListOf<NodeInfo>()
+        collectNodes(root, collected)
         root.recycle()
 
-        return lines.joinToString("\n").takeIf { it.isNotBlank() }
+        if (collected.isEmpty()) return null
+
+        return summarize(collected)
     }
 
-    @Suppress("DEPRECATION")
-    private fun collectText(node: AccessibilityNodeInfo, out: MutableList<String>) {
-        val text = node.text?.toString()?.trim()
-        val desc = node.contentDescription?.toString()?.trim()
+    /** Lightweight holder for the properties we care about from each node. */
+    private data class NodeInfo(
+        val text: String,
+        val isButton: Boolean,
+        val isEditable: Boolean,
+        val isLink: Boolean,
+        val isHeading: Boolean
+    )
 
-        if (!text.isNullOrBlank()) out.add(text)
-        else if (!desc.isNullOrBlank()) out.add(desc)
+    @Suppress("DEPRECATION")
+    private fun collectNodes(node: AccessibilityNodeInfo, out: MutableList<NodeInfo>) {
+        val text = node.text?.toString()?.trim()
+            ?: node.contentDescription?.toString()?.trim()
+
+        if (!text.isNullOrBlank()) {
+            val cls = node.className?.toString()?.lowercase() ?: ""
+            val info = NodeInfo(
+                text = text,
+                isButton = node.isClickable &&
+                    (cls.contains("button") || cls.contains("imageview") ||
+                     cls.contains("imagebutton") || cls.contains("fab")),
+                isEditable = node.isEditable,
+                isLink = cls.contains("textview") && node.isClickable &&
+                    !cls.contains("button"),
+                isHeading = cls.contains("toolbar") || cls.contains("title") ||
+                    cls.contains("header")
+            )
+            out.add(info)
+        }
 
         for (i in 0 until node.childCount) {
             val child = node.getChild(i) ?: continue
-            collectText(child, out)
+            collectNodes(child, out)
             child.recycle()
         }
+    }
+
+    /**
+     * Converts a flat list of [NodeInfo]s into a spoken-friendly summary.
+     *
+     * Output example:
+     *   "The screen shows: YouTube. There is a search field. Buttons: Search, Home, Library.
+     *    Text items: Trending, Music, Gaming."
+     */
+    private fun summarize(nodes: List<NodeInfo>): String {
+        val headings  = nodes.filter { it.isHeading  }.map { it.text }.distinct().take(2)
+        val editables = nodes.filter { it.isEditable }.map { it.text }.distinct().take(3)
+        val buttons   = nodes.filter { it.isButton   }.map { it.text }.distinct().take(8)
+        val links     = nodes.filter { it.isLink     }.map { it.text }.distinct().take(5)
+        val texts     = nodes.filter { !it.isButton && !it.isEditable && !it.isLink && !it.isHeading }
+                            .map { it.text }.distinct().take(10)
+
+        val parts = mutableListOf<String>()
+
+        if (headings.isNotEmpty())
+            parts += "The screen shows: ${headings.joinToString(", ")}."
+        if (editables.isNotEmpty())
+            parts += "There ${if (editables.size == 1) "is a" else "are"} " +
+                     "${editables.joinToString(", ")} " +
+                     "${if (editables.size == 1) "field" else "fields"}."
+        if (buttons.isNotEmpty())
+            parts += "Buttons: ${buttons.joinToString(", ")}."
+        if (links.isNotEmpty())
+            parts += "Links: ${links.joinToString(", ")}."
+        if (texts.isNotEmpty())
+            parts += "Content: ${texts.joinToString(". ")}."
+
+        return parts.joinToString(" ").takeIf { it.isNotBlank() }
+            ?: nodes.map { it.text }.distinct().take(15).joinToString(". ")
     }
 
     // ── Action Helpers ────────────────────────────────────────────────────────
@@ -223,6 +280,88 @@ class KhwabAccessibilityService : AccessibilityService() {
         } finally {
             root.recycle()
         }
+    }
+
+    /**
+     * Scrolls a scrollable container to the top by repeatedly performing
+     * SCROLL_BACKWARD until the action no longer changes the view.
+     * Capped at 50 iterations to prevent an infinite loop.
+     */
+    @Suppress("DEPRECATION")
+    fun performScrollToTop(): Boolean {
+        val root = rootInActiveWindow ?: return false
+        return try {
+            val scrollable = findScrollable(root) ?: return false
+            var scrolled = false
+            repeat(50) {
+                if (scrollable.performAction(AccessibilityNodeInfo.ACTION_SCROLL_BACKWARD))
+                    scrolled = true
+                else return@repeat
+            }
+            scrolled
+        } finally {
+            root.recycle()
+        }
+    }
+
+    /**
+     * Scrolls a scrollable container to the bottom by repeatedly performing
+     * SCROLL_FORWARD until the action no longer changes the view.
+     * Capped at 50 iterations to prevent an infinite loop.
+     */
+    @Suppress("DEPRECATION")
+    fun performScrollToBottom(): Boolean {
+        val root = rootInActiveWindow ?: return false
+        return try {
+            val scrollable = findScrollable(root) ?: return false
+            var scrolled = false
+            repeat(50) {
+                if (scrollable.performAction(AccessibilityNodeInfo.ACTION_SCROLL_FORWARD))
+                    scrolled = true
+                else return@repeat
+            }
+            scrolled
+        } finally {
+            root.recycle()
+        }
+    }
+
+    /**
+     * Executes a swipe gesture using [AccessibilityService.dispatchGesture].
+     *
+     * [direction] is "left" or "right". The gesture sweeps across the middle
+     * of a 1080×1920 reference display — scaled by the system to the actual
+     * screen size because the path coordinates are in dp (virtual display units).
+     *
+     * Returns false if the device is running below API 24 or if the gesture
+     * could not be dispatched.
+     */
+    fun performSwipe(direction: String): Boolean {
+        if (android.os.Build.VERSION.SDK_INT < android.os.Build.VERSION_CODES.N) return false
+
+        val midY = 960f  // vertical center of reference display
+        val startX: Float
+        val endX: Float
+
+        when (direction.trim().lowercase()) {
+            "left" -> { startX = 900f; endX = 180f }
+            "right" -> { startX = 180f; endX = 900f }
+            else -> return false
+        }
+
+        val path = android.graphics.Path().apply {
+            moveTo(startX, midY)
+            lineTo(endX, midY)
+        }
+
+        val stroke = android.accessibilityservice.GestureDescription.StrokeDescription(
+            path, 0L, 300L
+        )
+        val gesture = android.accessibilityservice.GestureDescription.Builder()
+            .addStroke(stroke)
+            .build()
+
+        return dispatchGesture(gesture, null, null)
     }
 
     /** Navigates back — equivalent to the system Back button. */
