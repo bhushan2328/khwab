@@ -50,10 +50,15 @@ object ModelDownloadManager {
     /** Returns true when all model files exist and are non-empty. */
     fun modelsReady(context: Context): Boolean {
         val dir = File(context.filesDir, OUTPUT_DIR)
-        return MODEL_FILES.all { f ->
+        val ready = MODEL_FILES.all { f ->
             val file = File(dir, f.name)
             file.exists() && file.length() > 0
         }
+        // Sanitize tokens.txt BOM on every check — handles files already on disk.
+        if (ready) {
+            stripBomIfPresent(File(dir, "tokens.txt"))
+        }
+        return ready
     }
 
     /**
@@ -148,6 +153,12 @@ object ModelDownloadManager {
                 tmp.renameTo(dest)
                 Log.d(TAG, "Downloaded: ${modelFile.name} (${dest.length() / 1_000_000} MB)")
 
+                // Strip UTF-8 BOM (EF BB BF) from tokens.txt — sherpa-onnx's
+                // native base64 decoder crashes (abort) on character 239 (0xEF).
+                if (modelFile.name == "tokens.txt") {
+                    stripBomIfPresent(dest)
+                }
+
             } catch (e: Exception) {
                 // Leave the .tmp file intact so the next attempt can resume.
                 Log.e(TAG, "Download interrupted for ${modelFile.name}: ${e.message}")
@@ -157,5 +168,21 @@ object ModelDownloadManager {
 
         onProgress(100, "")
         Log.d(TAG, "All model files downloaded successfully.")
+    }
+
+    /**
+     * Strips a UTF-8 BOM (0xEF 0xBB 0xBF) from the start of [file] if present.
+     * Rewrites the file in-place without the BOM bytes.
+     */
+    private fun stripBomIfPresent(file: File) {
+        val bytes = file.readBytes()
+        if (bytes.size >= 3 &&
+            bytes[0] == 0xEF.toByte() &&
+            bytes[1] == 0xBB.toByte() &&
+            bytes[2] == 0xBF.toByte()
+        ) {
+            Log.d(TAG, "Stripping UTF-8 BOM from ${file.name}")
+            file.writeBytes(bytes.copyOfRange(3, bytes.size))
+        }
     }
 }
