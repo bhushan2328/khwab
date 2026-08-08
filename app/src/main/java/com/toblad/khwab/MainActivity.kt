@@ -1,12 +1,16 @@
 package com.toblad.khwab
 
+import android.Manifest
 import android.content.Intent
+import android.net.Uri
 import android.os.Build
 import android.os.Bundle
+import android.provider.Settings
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
 import androidx.activity.result.contract.ActivityResultContracts
+import android.app.AlertDialog
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.saveable.rememberSaveable
@@ -26,6 +30,22 @@ import com.toblad.khwab.ui.theme.HomeScreen
 import com.toblad.khwab.ui.theme.KhwabTheme
 
 class MainActivity : ComponentActivity() {
+
+    // Set to true when we send the user to the overlay permission Settings screen.
+    // onResume checks this flag to call startAssistant() once they return.
+    private var pendingOverlayPermission = false
+
+    override fun onResume() {
+        super.onResume()
+        if (pendingOverlayPermission) {
+            pendingOverlayPermission = false
+            val permissionManager = PermissionManager(this)
+            if (permissionManager.hasOverlayPermission()) {
+                startAssistant()
+            }
+            // If still not granted, leave the user on the home screen to try again.
+        }
+    }
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -56,6 +76,7 @@ class MainActivity : ComponentActivity() {
                 if (allGranted) {
 
                     if (!permissionManager.hasOverlayPermission()) {
+                        pendingOverlayPermission = true
                         permissionManager.requestOverlayPermission()
                     } else {
                         startAssistant()
@@ -63,14 +84,16 @@ class MainActivity : ComponentActivity() {
 
                 } else {
 
+                    val denied = permissions
+                        .filterValues { !it }
+                        .keys
+
                     Logger.error(
                         LogModule.SYSTEM,
-                        "Required permissions denied"
+                        "Required permissions denied: $denied"
                     )
 
-                    AssistantStateManager.updateState(
-                        AssistantState.ERROR
-                    )
+                    showPermissionDeniedDialog(denied)
                 }
             }
 
@@ -179,5 +202,50 @@ class MainActivity : ComponentActivity() {
         AssistantStateManager.updateState(
             AssistantState.STOPPED
         )
+    }
+
+    private fun showPermissionDeniedDialog(denied: Set<String>) {
+        AssistantStateManager.updateState(AssistantState.ERROR)
+
+        val deniedLabels = denied.joinToString("\n") { permission ->
+            when (permission) {
+                Manifest.permission.RECORD_AUDIO       -> "• Microphone (required to hear your voice)"
+                Manifest.permission.ACCESS_COARSE_LOCATION -> "• Location (used for weather-aware themes)"
+                Manifest.permission.POST_NOTIFICATIONS -> "• Notifications (used for the assistant status bar)"
+                else -> "• ${permission.substringAfterLast('.')}"
+            }
+        }
+
+        val isPermanentlyDenied = denied.any { permission ->
+            !shouldShowRequestPermissionRationale(permission)
+        }
+
+        val message = if (isPermanentlyDenied) {
+            "The following permissions were permanently denied:\n\n$deniedLabels\n\n" +
+            "Please open App Settings and grant them manually."
+        } else {
+            "Khwab needs the following permissions to work:\n\n$deniedLabels"
+        }
+
+        val dialog = AlertDialog.Builder(this)
+            .setTitle("Permissions Required")
+            .setMessage(message)
+            .setNegativeButton("Cancel") { _, _ -> /* stay on ERROR state */ }
+
+        if (isPermanentlyDenied) {
+            dialog.setPositiveButton("Open Settings") { _, _ ->
+                startActivity(
+                    Intent(Settings.ACTION_APPLICATION_DETAILS_SETTINGS).apply {
+                        data = Uri.fromParts("package", packageName, null)
+                    }
+                )
+            }
+        } else {
+            dialog.setPositiveButton("Grant Permissions") { _, _ ->
+                startAssistant()
+            }
+        }
+
+        dialog.show()
     }
 }

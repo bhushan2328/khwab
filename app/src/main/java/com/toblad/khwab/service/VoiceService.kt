@@ -65,103 +65,118 @@ class VoiceService : Service() {
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
 
-        try {
-            Log.d(TAG, "Starting foreground service")
+        // startForeground must be called immediately on the main thread — before
+        // any heavy work — to satisfy the 5-second foreground service deadline.
+        NotificationHelper.createNotificationChannel(this)
+        startForeground(NOTIFICATION_ID, NotificationHelper.createNotification(this))
 
-            NotificationHelper.createNotificationChannel(this)
-            startForeground(NOTIFICATION_ID, NotificationHelper.createNotification(this))
+        // Show the overlay immediately so the user sees it right away.
+        floatingWindow.show()
+        floatingWindow.setState(AssistantState.READY)
+        AssistantStateManager.updateState(AssistantState.READY)
 
-            Log.d(TAG, "Showing floating window")
+        // Move all heavy work (ONNX model load + audio record loop) to a background
+        // thread. Doing this on the main thread causes an ANR and the service crashes
+        // before the overlay ever becomes visible.
+        serviceScope.launch {
+            try {
+                Log.d(TAG, "Registering recognition listener")
 
-            floatingWindow.show()
-            floatingWindow.setState(AssistantState.READY)
-            AssistantStateManager.updateState(AssistantState.READY)
+                speechManager.setRecognitionListener { result ->
 
-            speechManager.setRecognitionListener { result ->
+                    Log.d("Sherpa", result.text)
 
-                Log.d("Sherpa", result.text)
-
-                floatingWindow.setState(AssistantState.THINKING)
-                AssistantStateManager.updateState(AssistantState.THINKING)
-
-                // Fix 3: process on IO dispatcher — never block the speech callback thread
-                serviceScope.launch {
-                    val response = try {
-                        integration.process(IntegrationRequest(input = result.text))
-                    } catch (e: Exception) {
-                        withContext(Dispatchers.Main) {
-                            floatingWindow.setState(AssistantState.ERROR)
-                        }
-                        Log.e(TAG, "Integration error", e)
-                        return@launch
+                    // listener fires on the AudioRecorder background thread —
+                    // switch to Main for UI updates, then to IO for the network call
+                    serviceScope.launch(Dispatchers.Main) {
+                        floatingWindow.setState(AssistantState.THINKING)
+                        AssistantStateManager.updateState(AssistantState.THINKING)
                     }
 
-                    // Execute Android-side command (open app, call, etc.)
-                    response.executionPlan?.let { plan ->
-                        Log.d("Khwab", "Executing: ${plan.action}")
-                        withContext(Dispatchers.Main) {
-                            floatingWindow.setState(AssistantState.EXECUTING)
-                            AssistantStateManager.updateState(AssistantState.EXECUTING)
-                        }
-                        executionEngine.execute(plan)
-                        Log.d("Khwab", "Execution done")
-                    }
-
-                    // Fix 4: speak the response text back to the user
-                    val responseText = response.message
-                    if (!responseText.isNullOrBlank() && response.success) {
-                        withContext(Dispatchers.Main) {
-                            floatingWindow.setState(AssistantState.SPEAKING)
-                            AssistantStateManager.updateState(AssistantState.SPEAKING)
-                        }
-                        speak(responseText)
-                    }
-
-                    // Schedule background knowledge acquisition if needed
-                    if (response.requiresAcquisition) {
-                        val query = response.acquisitionQuery ?: result.text
-                        Log.d(TAG, "Scheduling knowledge acquisition for: $query")
-                        KnowledgeAcquisitionWorker.enqueue(this@VoiceService, query)
-                    }
-
-                    // Delete learned knowledge if user asked to forget it
-                    response.forgetLearnedKey?.let { key ->
-                        try {
-                            RoomTemporaryKnowledgeRepository(
-                                KhwabDatabase.getInstance(applicationContext).temporaryKnowledgeDao()
-                            ).deleteByKey(key)
-                            Log.d(TAG, "Deleted learned knowledge for key: $key")
+                    serviceScope.launch {
+                        val response = try {
+                            integration.process(IntegrationRequest(input = result.text))
                         } catch (e: Exception) {
-                            Log.e(TAG, "Failed to delete learned knowledge", e)
+                            withContext(Dispatchers.Main) {
+                                floatingWindow.setState(AssistantState.ERROR)
+                                AssistantStateManager.updateState(AssistantState.ERROR)
+                            }
+                            Log.e(TAG, "Integration error", e)
+                            return@launch
                         }
-                    }
 
-                    withContext(Dispatchers.Main) {
-                        floatingWindow.setState(AssistantState.LISTENING)
-                        AssistantStateManager.updateState(AssistantState.LISTENING)
+                        // Execute Android-side command (open app, call, etc.)
+                        response.executionPlan?.let { plan ->
+                            Log.d("Khwab", "Executing: ${plan.action}")
+                            withContext(Dispatchers.Main) {
+                                floatingWindow.setState(AssistantState.EXECUTING)
+                                AssistantStateManager.updateState(AssistantState.EXECUTING)
+                            }
+                            executionEngine.execute(plan)
+                            Log.d("Khwab", "Execution done")
+                        }
+
+                        // Speak the response text back to the user
+                        val responseText = response.message
+                        if (!responseText.isNullOrBlank() && response.success) {
+                            withContext(Dispatchers.Main) {
+                                floatingWindow.setState(AssistantState.SPEAKING)
+                                AssistantStateManager.updateState(AssistantState.SPEAKING)
+                            }
+                            speak(responseText)
+                        }
+
+                        // Schedule background knowledge acquisition if needed
+                        if (response.requiresAcquisition) {
+                            val query = response.acquisitionQuery ?: result.text
+                            Log.d(TAG, "Scheduling knowledge acquisition for: $query")
+                            KnowledgeAcquisitionWorker.enqueue(this@VoiceService, query)
+                        }
+
+                        // Delete learned knowledge if user asked to forget it
+                        response.forgetLearnedKey?.let { key ->
+                            try {
+                                RoomTemporaryKnowledgeRepository(
+                                    KhwabDatabase.getInstance(applicationContext).temporaryKnowledgeDao()
+                                ).deleteByKey(key)
+                                Log.d(TAG, "Deleted learned knowledge for key: $key")
+                            } catch (e: Exception) {
+                                Log.e(TAG, "Failed to delete learned knowledge", e)
+                            }
+                        }
+
+                        withContext(Dispatchers.Main) {
+                            floatingWindow.setState(AssistantState.LISTENING)
+                            AssistantStateManager.updateState(AssistantState.LISTENING)
+                        }
                     }
                 }
+
+                Log.d(TAG, "Initializing Sherpa (background thread)")
+                speechManager.initialize()
+
+                Log.d(TAG, "Starting listening")
+                withContext(Dispatchers.Main) {
+                    floatingWindow.setState(AssistantState.LISTENING)
+                    AssistantStateManager.updateState(AssistantState.LISTENING)
+                }
+                speechManager.startListening()
+
+                Log.d(TAG, "VoiceService started successfully")
+
+            } catch (e: Exception) {
+                Log.e(TAG, "Failed to start VoiceService", e)
+                e.printStackTrace()
+                withContext(Dispatchers.Main) {
+                    AssistantStateManager.updateState(AssistantState.ERROR)
+                    Toast.makeText(
+                        this@VoiceService,
+                        "VoiceService Error:\n${e.javaClass.simpleName}\n${e.message}",
+                        Toast.LENGTH_LONG
+                    ).show()
+                }
+                stopSelf()
             }
-
-            Log.d(TAG, "Initializing Sherpa")
-            speechManager.initialize()
-
-            Log.d(TAG, "Starting listening")
-            floatingWindow.setState(AssistantState.LISTENING)
-            AssistantStateManager.updateState(AssistantState.LISTENING)
-            speechManager.startListening()
-
-            Log.d(TAG, "VoiceService started successfully")
-
-        } catch (e: Exception) {
-            Log.e(TAG, "Failed to start VoiceService", e)
-            e.printStackTrace()
-            Toast.makeText(
-                this,
-                "VoiceService Error:\n${e.javaClass.simpleName}\n${e.message}",
-                Toast.LENGTH_LONG
-            ).show()
-            stopSelf()
         }
 
         return START_STICKY
@@ -169,6 +184,10 @@ class VoiceService : Service() {
 
     override fun onDestroy() {
         Log.d(TAG, "Stopping VoiceService")
+
+        // Always reset state to STOPPED so the HomeScreen reflects reality
+        // even when the OS kills the service without stopAssistant() being called.
+        AssistantStateManager.updateState(AssistantState.STOPPED)
 
         try { speechManager.release() } catch (e: Exception) {
             Log.e(TAG, "Failed to release SpeechManager", e)

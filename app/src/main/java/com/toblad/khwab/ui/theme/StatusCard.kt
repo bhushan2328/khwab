@@ -96,13 +96,18 @@ fun StatusCard(
         TimePhase.SUNRISE, TimePhase.MORNING, TimePhase.NOON, TimePhase.AFTERNOON
     )
 
-    val cardContainer = if (isDaytime)
-        Color.White.copy(alpha = 0.78f)   // frosted glass over bright sky
-    else
-        lerp(colors.surfaceVariant, animatedBgTint, 0.5f)
+    val cardContainer = when {
+        isDaytime  -> Color.White.copy(alpha = 0.78f)          // frosted glass over bright sky
+        auraActive -> lerp(colors.surfaceVariant, animatedBgTint, 0.5f)
+        else       -> lerp(                                    // non-Aura: stronger surface so text
+            colors.surface,                                    // stays readable over any gradient bg
+            animatedBorderColor.copy(alpha = 0.12f),
+            0.5f
+        )
+    }
 
-    val labelColor   = if (isDaytime) animatedBorderColor else animatedBorderColor
-    val messageColor = if (isDaytime) Color(0xFF1f2328) else colors.onSurfaceVariant
+    val labelColor   = animatedBorderColor
+    val messageColor = if (isDaytime) Color(0xFF1f2328) else colors.onSurface
 
     Card(
         modifier = Modifier.fillMaxWidth(),
