@@ -57,7 +57,11 @@ object ModelDownloadManager {
     }
 
     /**
-     * Downloads all model files sequentially.
+     * Downloads all model files sequentially, resuming partial downloads.
+     *
+     * If a previous attempt left a `.tmp` file on disk, a `Range` request
+     * continues from where it left off so the user never re-downloads bytes
+     * they already have — critical for large files on slow/mobile connections.
      *
      * [onProgress] is called with values 0..100 representing overall
      * percentage across all files combined.
@@ -70,61 +74,83 @@ object ModelDownloadManager {
     ) = withContext(Dispatchers.IO) {
 
         val dir = File(context.filesDir, OUTPUT_DIR).also { it.mkdirs() }
-
         val totalFiles = MODEL_FILES.size
 
         MODEL_FILES.forEachIndexed { fileIndex, modelFile ->
             val dest = File(dir, modelFile.name)
 
-            // Skip files already fully downloaded
+            // Skip files already fully and successfully downloaded.
             if (dest.exists() && dest.length() > 0) {
                 Log.d(TAG, "Already downloaded: ${modelFile.name}")
                 onProgress(((fileIndex + 1) * 100) / totalFiles, modelFile.name)
                 return@forEachIndexed
             }
 
-            Log.d(TAG, "Downloading: ${modelFile.name} from ${modelFile.url}")
-
             val tmp = File(dir, "${modelFile.name}.tmp")
+            val resumeFrom = if (tmp.exists()) tmp.length() else 0L
+
+            Log.d(TAG, "Downloading: ${modelFile.name} " +
+                    "(resume from $resumeFrom bytes) from ${modelFile.url}")
+
             try {
                 val connection = (URL(modelFile.url).openConnection() as HttpURLConnection).apply {
                     requestMethod = "GET"
                     connectTimeout = 15_000
-                    readTimeout    = 60_000
+                    // Large model files on slow connections need a generous read
+                    // timeout — 5 minutes is safe without risking true hangs.
+                    readTimeout    = 300_000
                     instanceFollowRedirects = true
+                    if (resumeFrom > 0) {
+                        setRequestProperty("Range", "bytes=$resumeFrom-")
+                    }
                     connect()
                 }
 
-                check(connection.responseCode == HttpURLConnection.HTTP_OK) {
-                    "HTTP ${connection.responseCode} for ${modelFile.url}"
+                val code = connection.responseCode
+                val resuming = code == HttpURLConnection.HTTP_PARTIAL  // 206
+                val fresh    = code == HttpURLConnection.HTTP_OK       // 200
+
+                check(resuming || fresh) {
+                    "HTTP $code for ${modelFile.url}"
                 }
 
-                val totalBytes = connection.contentLengthLong.coerceAtLeast(1L)
-                var bytesRead = 0L
+                // If the server ignored our Range header and sent 200, start fresh.
+                val startOffset = if (resuming) resumeFrom else 0L
+                if (!resuming && resumeFrom > 0) {
+                    Log.d(TAG, "Server does not support resume — restarting ${modelFile.name}")
+                    tmp.delete()
+                }
+
+                val contentLength = connection.contentLengthLong
+                // Total file size: for a 206 response, Content-Length is the remaining
+                // bytes, so we add the already-downloaded offset to get the full size.
+                val totalBytes = (if (resuming) startOffset + contentLength
+                                  else contentLength).coerceAtLeast(1L)
+                var bytesRead = startOffset
 
                 connection.inputStream.use { input ->
-                    tmp.outputStream().use { output ->
+                    // append=true resumes from the end; append=false overwrites for a fresh start.
+                    java.io.FileOutputStream(tmp, resuming).use { output ->
                         val buf = ByteArray(64 * 1024)
                         var n: Int
                         while (input.read(buf).also { n = it } != -1) {
                             output.write(buf, 0, n)
                             bytesRead += n
 
-                            // Overall progress: each file is (1/totalFiles) of 100%
-                            val filePercent   = (bytesRead * 100L / totalBytes).toInt()
-                            val overallPercent =
-                                (fileIndex * 100 + filePercent) / totalFiles
+                            val filePercent    = (bytesRead * 100L / totalBytes).toInt()
+                            val overallPercent = (fileIndex * 100 + filePercent) / totalFiles
                             onProgress(overallPercent, modelFile.name)
                         }
                     }
                 }
 
-                // Atomic rename — never leave a partial file as the real file
+                // Atomic rename — only promote tmp to dest when fully written.
                 tmp.renameTo(dest)
                 Log.d(TAG, "Downloaded: ${modelFile.name} (${dest.length() / 1_000_000} MB)")
 
             } catch (e: Exception) {
-                tmp.delete()
+                // Leave the .tmp file intact so the next attempt can resume.
+                Log.e(TAG, "Download interrupted for ${modelFile.name}: ${e.message}")
                 throw e
             }
         }
