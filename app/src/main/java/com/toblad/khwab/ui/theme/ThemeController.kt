@@ -4,7 +4,6 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
 import com.toblad.khwab.aura.model.AuraTheme
-import com.toblad.khwab.aura.model.ThemeProfile
 
 object ThemeController {
 
@@ -14,7 +13,7 @@ object ThemeController {
     /**
      * Colors derived from Aura's latest real-world profile
      * (sky, weather, ambient light). Recomputed by
-     * [updateAuraProfile] whenever Aura refreshes with new
+     * [updateAuraTheme] whenever Aura refreshes with new
      * location, weather, or time data.
      */
     var currentAuraColors by mutableStateOf(auraColorScheme(AuraTheme().profile))
@@ -58,13 +57,6 @@ object ThemeController {
         currentAuraTheme = theme
         currentAuraColors = auraColorScheme(theme.profile)
     }
-
-    /**
-     * Recomputes the live Aura color scheme from a fresh
-     * [ThemeProfile] reflecting real sky/weather/light
-     * conditions.
-     */
-    fun updateAuraProfile(profile: ThemeProfile) {
-        currentAuraColors = auraColorScheme(profile)
-    }
+    // fix #8: removed updateAuraProfile — dead code that caused stale currentAuraTheme
+    // if called (colors updated but theme snapshot lagged behind). Use updateAuraTheme().
 }

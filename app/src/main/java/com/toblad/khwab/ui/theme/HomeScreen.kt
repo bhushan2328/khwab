@@ -159,8 +159,11 @@ fun HomeScreen(
                 modifier = Modifier
                     .fillMaxWidth(0.88f)
                     .padding(vertical = 4.dp),
-                color     = if (isDaytimeDivider) Color.White.copy(alpha = 0.6f)
-                            else colors.outline.copy(alpha = 0.5f),
+                color = when {
+                    isDaytimeDivider -> Color.White.copy(alpha = 0.60f)
+                    auraActive       -> colors.outline.copy(alpha = 0.75f) // fix #10: more visible at night
+                    else             -> colors.outline.copy(alpha = 0.50f)
+                },
                 thickness = 1.dp
             )
 

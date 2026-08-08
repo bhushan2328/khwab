@@ -3,15 +3,15 @@
     <color name="black">#FF000000</color>
     <color name="white">#FFFFFFFF</color>
 
-    <!-- App background reference used by themes.xml -->
-    <color name="khwab_background">#FF080B12</color>
+    <!-- App background reference used by themes.xml — updated to new palette -->
+    <color name="khwab_background">#FF06080F</color>
 
-    <!-- Overlay mic state colours — aligned to app palette -->
-    <color name="mic_idle">#CC2196F3</color>
-    <color name="mic_listening">#CC00C853</color>
-    <color name="mic_thinking">#CC7C5CD8</color>
-    <color name="mic_executing">#CC0288D1</color>
-    <color name="mic_speaking">#CC2196F3</color>
-    <color name="mic_error">#CCF44336</color>
+    <!-- Overlay mic state colours — synced with updated KhwabColor palette -->
+    <color name="mic_idle">#CC4F8EF7</color>       <!-- KhwabBlue -->
+    <color name="mic_listening">#CC29B6F6</color>  <!-- KhwabListening -->
+    <color name="mic_thinking">#CCA78BFA</color>   <!-- KhwabProcessing -->
+    <color name="mic_executing">#CCFBBF24</color>  <!-- KhwabExecuting -->
+    <color name="mic_speaking">#CC34D399</color>   <!-- KhwabSpeaking -->
+    <color name="mic_error">#CCF44336</color>      <!-- KhwabRed (unchanged) -->
     <color name="mic_ripple">#50FFFFFF</color>
 </resources>

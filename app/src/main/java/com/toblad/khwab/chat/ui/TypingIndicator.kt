@@ -24,8 +24,10 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.unit.dp
+import com.toblad.khwab.aura.model.TimePhase
 import com.toblad.khwab.ui.theme.ThemeController
 import com.toblad.khwab.ui.theme.ThemeMode
 
@@ -34,25 +36,32 @@ fun TypingIndicator() {
     val colors = MaterialTheme.colorScheme
     val auraActive = ThemeController.currentTheme == ThemeMode.AURA
 
-    val containerColor = if (auraActive) colors.surfaceVariant.copy(alpha = 0.72f)
-                         else colors.surfaceVariant
-
-    // Dot colour matches the accent so it feels part of the assistant brand
-    val dotColor = colors.primary.copy(alpha = 0.85f)
+    // fix #2: daytime Aura awareness — frosted white card + dark dots over bright sky
+    val isDaytimeAura = auraActive && ThemeController.currentAuraTheme.timePhase in listOf(
+        TimePhase.SUNRISE, TimePhase.MORNING, TimePhase.NOON, TimePhase.AFTERNOON
+    )
+    val containerColor = when {
+        isDaytimeAura -> Color.White.copy(alpha = 0.75f)
+        auraActive    -> colors.surfaceVariant.copy(alpha = 0.80f)
+        else          -> colors.surfaceVariant
+    }
+    // fix #2: dark dots on daytime frosted card, accent dots at night
+    val dotColor = if (isDaytimeAura) Color(0xFF1A1A2E) else colors.primary.copy(alpha = 0.85f)
 
     val transition = rememberInfiniteTransition(label = "typing")
 
     // Three dots: staggered 160 ms each, scale + Y with FastOutSlowIn for "breathing" feel
     data class DotAnim(val yOffset: Float, val scale: Float)
 
+    // fix #13: increased travel (-14f) and wider stagger (180ms) for fluid wave
     val dotAnims = (0..2).map { index ->
         val yOffset by transition.animateFloat(
             initialValue = 0f,
-            targetValue = -10f,
+            targetValue = -14f,
             animationSpec = infiniteRepeatable(
                 animation = tween(
                     durationMillis = 480,
-                    delayMillis = index * 160,
+                    delayMillis = index * 180,
                     easing = FastOutSlowInEasing
                 ),
                 repeatMode = RepeatMode.Reverse
@@ -65,7 +74,7 @@ fun TypingIndicator() {
             animationSpec = infiniteRepeatable(
                 animation = tween(
                     durationMillis = 480,
-                    delayMillis = index * 160,
+                    delayMillis = index * 180,
                     easing = FastOutSlowInEasing
                 ),
                 repeatMode = RepeatMode.Reverse
@@ -89,7 +98,7 @@ fun TypingIndicator() {
                 .padding(start = 4.dp, top = 4.dp, bottom = 4.dp, end = 12.dp),
             shape = RoundedCornerShape(18.dp),
             colors = CardDefaults.cardColors(containerColor = containerColor),
-            elevation = CardDefaults.cardElevation(defaultElevation = 2.dp)
+            elevation = CardDefaults.cardElevation(defaultElevation = 6.dp) // fix #4: match other cards
         ) {
             Row(
                 modifier = Modifier.padding(horizontal = 20.dp, vertical = 14.dp),

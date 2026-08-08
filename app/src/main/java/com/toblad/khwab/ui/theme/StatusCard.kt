@@ -107,7 +107,12 @@ fun StatusCard(
     }
 
     val labelColor   = animatedBorderColor
-    val messageColor = if (isDaytime) Color(0xFF1f2328) else colors.onSurface
+    // fix #11: softer message text in Aura for visual hierarchy between label and message
+    val messageColor = when {
+        isDaytime  -> Color(0xFF1f2328)
+        auraActive -> colors.onSurface.copy(alpha = 0.75f)
+        else       -> colors.onSurface
+    }
 
     Card(
         modifier = Modifier.fillMaxWidth(),

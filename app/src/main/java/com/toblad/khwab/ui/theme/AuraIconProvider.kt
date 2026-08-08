@@ -93,12 +93,13 @@ object AuraIconProvider {
      * Chat icon reflects time of day.
      */
     fun chatIconFor(timePhase: TimePhase): ImageVector = when (timePhase) {
-        TimePhase.NIGHT, TimePhase.MIDNIGHT    -> Icons.Default.NightsStay
-        TimePhase.MORNING, TimePhase.PRE_DAWN  -> Icons.Default.WbSunny
-        TimePhase.NOON                         -> Icons.Default.LightMode
-        TimePhase.AFTERNOON, TimePhase.SUNRISE -> Icons.Default.WbTwilight
-        TimePhase.EVENING, TimePhase.SUNSET    -> Icons.Default.WbTwilight
-    }
+            TimePhase.NIGHT, TimePhase.MIDNIGHT    -> Icons.Default.NightsStay
+            TimePhase.PRE_DAWN                     -> Icons.Default.DarkMode    // fix #9: pre-dawn is still dark
+            TimePhase.MORNING                      -> Icons.Default.WbSunny
+            TimePhase.NOON                         -> Icons.Default.LightMode
+            TimePhase.AFTERNOON, TimePhase.SUNRISE -> Icons.Default.WbTwilight
+            TimePhase.EVENING, TimePhase.SUNSET    -> Icons.Default.WbTwilight
+        }
 
     /**
      * Settings icon shifts with sky position — sun vs. star/moon.

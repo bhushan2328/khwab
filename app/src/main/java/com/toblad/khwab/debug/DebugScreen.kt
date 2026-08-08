@@ -1,5 +1,6 @@
 package com.toblad.khwab.debug
 
+import androidx.compose.foundation.background
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Spacer
@@ -57,7 +58,7 @@ fun DebugScreen(
                     }
                 },
                 colors = TopAppBarDefaults.topAppBarColors(
-                    containerColor = colors.surface,
+                    containerColor = colors.surface.copy(alpha = 0.95f), // fix #5: consistent opacity
                     titleContentColor = colors.onSurface
                 )
             )
@@ -93,8 +94,17 @@ fun DebugScreen(
                     val lines = errorLog.lines()
                     lines.forEach { line ->
                         val isError = line.contains("ERROR", ignoreCase = true)
+                        // fix #6: background highlight on error lines for quick scanning
                         Text(
                             text = line,
+                            modifier = if (isError) Modifier
+                                .fillMaxWidth()
+                                .background(
+                                    colors.errorContainer.copy(alpha = 0.25f),
+                                    RoundedCornerShape(4.dp)
+                                )
+                                .padding(horizontal = 4.dp)
+                            else Modifier,
                             fontFamily = FontFamily.Monospace,
                             fontSize = 12.sp,
                             lineHeight = 18.sp,

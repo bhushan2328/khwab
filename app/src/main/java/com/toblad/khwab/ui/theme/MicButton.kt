@@ -126,15 +126,27 @@ fun MicButton(
     val ringSize: Dp   = 196.dp
     val outerRingSize: Dp = 224.dp
 
-    // In daytime Aura mode the pulse rings should be white so they're visible
-    // against the bright sky. At night / dark themes use the primary brand colour.
+    // Ring colour strategy:
+    //   • Daytime Aura sky → white rings (they'd disappear on a bright background)
+    //   • Dark Aura sky (night/storm/pre-dawn etc.) → brighten the primary colour
+    //     so rings are clearly visible against the very dark canvas
+    //   • Non-Aura → standard primary as before
     val isDaytimeAura = auraActive && ThemeController.currentAuraTheme.timePhase in listOf(
         com.toblad.khwab.aura.model.TimePhase.SUNRISE,
         com.toblad.khwab.aura.model.TimePhase.MORNING,
         com.toblad.khwab.aura.model.TimePhase.NOON,
         com.toblad.khwab.aura.model.TimePhase.AFTERNOON
     )
-    val ringColor = if (isDaytimeAura) Color.White else colors.primary
+    val ringColor = when {
+        isDaytimeAura -> Color.White
+        auraActive    -> Color(
+            red   = (colors.primary.red   * 1.35f).coerceAtMost(1f),
+            green = (colors.primary.green * 1.35f).coerceAtMost(1f),
+            blue  = (colors.primary.blue  * 1.35f).coerceAtMost(1f),
+            alpha = 1f
+        )
+        else          -> colors.primary
+    }
 
     Box(
         modifier = modifier.size(outerRingSize),

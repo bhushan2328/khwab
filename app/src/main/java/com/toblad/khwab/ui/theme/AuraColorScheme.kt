@@ -58,10 +58,14 @@ fun auraColorScheme(profile: ThemeProfile): ColorScheme {
         surface = surface,
         onSurface = sky.onSurface,
 
+        // onSurfaceVariant is intentionally dimmer than onSurface — used for
+        // secondary labels, captions, and hints; gives real text hierarchy.
         surfaceVariant = sky.surfaceVariant,
-        onSurfaceVariant = sky.onSurface,
+        onSurfaceVariant = sky.onSurface.copy(alpha = 0.65f),
 
-        outline = sky.onSurface.copy(alpha = 0.5f)
+        // Outline uses surfaceVariant so dividers are subtle ink, not a
+        // washed-out ghost of the text colour.
+        outline = sky.surfaceVariant
     )
 }
 
@@ -76,13 +80,15 @@ private data class SkyPalette(
 
 private fun skyPalette(sky: SkyStyle): SkyPalette = when (sky) {
 
+    // PRE_DAWN: deep indigo with a hint of warmth — darker than MIDNIGHT's
+    // cold blue-black so the two phases read as visually distinct.
     SkyStyle.PRE_DAWN -> SkyPalette(
-        background = Color(0xFF10122B),
-        surface = Color(0xFF191B3D),
-        surfaceVariant = Color(0xFF262A52),
-        secondary = Color(0xFF6F73C9),
-        tertiary = Color(0xFFB18CD9),
-        onSurface = Color(0xFFE4E1FA)
+        background = Color(0xFF0E1028),
+        surface = Color(0xFF171938),
+        surfaceVariant = Color(0xFF232650),
+        secondary = Color(0xFF7A7FD6),
+        tertiary = Color(0xFFBE97E8),
+        onSurface = Color(0xFFE8E5FF)
     )
 
     SkyStyle.DAWN,
@@ -149,53 +155,63 @@ private fun skyPalette(sky: SkyStyle): SkyPalette = when (sky) {
         onSurface = Color(0xFFE0E3FF)
     )
 
+    // MIDNIGHT: coldest, deepest — near-black with icy blue undertone.
+    // Distinct from PRE_DAWN by being cooler and having less warm violet.
     SkyStyle.MIDNIGHT -> SkyPalette(
-        background = Color(0xFF05061A),
-        surface = Color(0xFF0A0C2A),
-        surfaceVariant = Color(0xFF12153D),
-        secondary = Color(0xFF4F5AB8),
-        tertiary = Color(0xFF8C7BD9),
-        onSurface = Color(0xFFC9CCF2)
+        background = Color(0xFF04050F),
+        surface = Color(0xFF080A1E),
+        surfaceVariant = Color(0xFF0F1230),
+        secondary = Color(0xFF4A55B0),
+        tertiary = Color(0xFF8470CC),
+        onSurface = Color(0xFFBFC3EE)
     )
 
+    // CLOUDY: warm-grey cast — feels like an overcast sky, not cold concrete.
     SkyStyle.CLOUDY -> SkyPalette(
-        background = Color(0xFF23262E),
-        surface = Color(0xFF30343E),
-        surfaceVariant = Color(0xFF40454F),
-        secondary = Color(0xFF9AA4B2),
-        tertiary = Color(0xFFC7CCD4),
-        onSurface = Color(0xFFEDEFF2)
+        background = Color(0xFF1F2229),
+        surface = Color(0xFF2B2F38),
+        surfaceVariant = Color(0xFF3B4049),
+        secondary = Color(0xFF8E9BAD),
+        tertiary = Color(0xFFB8C1CC),
+        onSurface = Color(0xFFE8EAF0)
     )
 
+    // FOG: slightly warmer and more desaturated than CLOUDY — milky haze feel.
     SkyStyle.FOG -> SkyPalette(
-        background = Color(0xFF2B2E31),
-        surface = Color(0xFF383B3F),
-        surfaceVariant = Color(0xFF484C50),
-        secondary = Color(0xFFA9B0B4),
-        tertiary = Color(0xFFCBD0D2),
-        onSurface = Color(0xFFEDEFEF)
+        background = Color(0xFF252729),
+        surface = Color(0xFF333537),
+        surfaceVariant = Color(0xFF424547),
+        secondary = Color(0xFF9BA4A8),
+        tertiary = Color(0xFFBFC6C9),
+        onSurface = Color(0xFFE8EAEB)
     )
 
+    // STORM: dark and dramatic but not crushed to pure black.
+    // Reduced weather darken (0.16→0.10) keeps surface colours readable.
     SkyStyle.STORM -> SkyPalette(
-        background = Color(0xFF15181D),
-        surface = Color(0xFF1E2228),
-        surfaceVariant = Color(0xFF2A2F36),
-        secondary = Color(0xFF6E86A6),
-        tertiary = Color(0xFFC7D0DC),
-        onSurface = Color(0xFFE3E7EC)
+        background = Color(0xFF131620),
+        surface = Color(0xFF1A1E2A),
+        surfaceVariant = Color(0xFF242933),
+        secondary = Color(0xFF607590),
+        tertiary = Color(0xFFB0BCC8),
+        onSurface = Color(0xFFD8DDE5)
     )
 }
 
 private fun ambientAccent(light: AmbientLightStyle): Color = when (light) {
-    AmbientLightStyle.PRE_DAWN -> Color(0xFF8890E8)
+    // PRE_DAWN: brighter periwinkle — visible against the very dark background
+    AmbientLightStyle.PRE_DAWN -> Color(0xFF9BA4F0)
     AmbientLightStyle.SUNRISE -> Color(0xFFFFA36C)
     AmbientLightStyle.MORNING -> Color(0xFF6FCBFF)
     AmbientLightStyle.NOON -> Color(0xFF3AD1FF)
     AmbientLightStyle.AFTERNOON -> Color(0xFFFFC978)
     AmbientLightStyle.SUNSET -> Color(0xFFFF8A65)
-    AmbientLightStyle.EVENING -> Color(0xFFB39DFF)
-    AmbientLightStyle.MOONLIGHT -> Color(0xFF9FA8FF)
-    AmbientLightStyle.NIGHT -> Color(0xFF6E7BD6)
+    // EVENING: richer violet for contrast against dark purple background
+    AmbientLightStyle.EVENING -> Color(0xFFC4B0FF)
+    // MOONLIGHT: slightly more luminous so it reads on NIGHT backgrounds
+    AmbientLightStyle.MOONLIGHT -> Color(0xFFADB7FF)
+    // NIGHT: brighter blue so it doesn't sink into the dark navy background
+    AmbientLightStyle.NIGHT -> Color(0xFF7D8EE8)
     AmbientLightStyle.OVERCAST -> Color(0xFFAAB2BC)
     AmbientLightStyle.FOG -> Color(0xFFBFC6C9)
 }
@@ -207,7 +223,9 @@ private fun weatherAdjust(color: Color, weather: WeatherEffectStyle): Color {
         WeatherEffectStyle.FOG -> 0.05f
         WeatherEffectStyle.RAIN -> 0.08f
         WeatherEffectStyle.SNOW -> 0.03f
-        WeatherEffectStyle.STORM -> 0.16f
+        // Reduced from 0.16 → 0.10: STORM sky bases are already dark; over-
+        // darkening crushed them to near-black and lost surface distinction.
+        WeatherEffectStyle.STORM -> 0.10f
     }
 
     if (darken == 0f) return color

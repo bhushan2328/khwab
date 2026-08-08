@@ -221,8 +221,10 @@ class FloatingWindow(private val context: Context) {
         val targetX = if (params.x + buttonWidth / 2 < screenWidth / 2) margin
                       else screenWidth - buttonWidth - margin
 
+        // fix #12: decelerate easing + longer duration for natural snap feel
         ValueAnimator.ofInt(params.x, targetX).apply {
-            duration = 250
+            duration = 320
+            interpolator = android.view.animation.DecelerateInterpolator(2f)
             addUpdateListener { anim ->
                 params.x = anim.animatedValue as Int
                 runCatching { windowManager.updateViewLayout(view, params) }
