@@ -1,5 +1,8 @@
 package com.toblad.khwab.ui.theme
 
+import androidx.compose.runtime.collectAsState
+import androidx.compose.runtime.getValue
+
 import androidx.compose.animation.animateColorAsState
 import androidx.compose.animation.core.FastOutSlowInEasing
 import androidx.compose.animation.core.RepeatMode
@@ -49,7 +52,7 @@ fun StatusCard(
     message: String
 ) {
     val colors = MaterialTheme.colorScheme
-    val assistantState = AssistantStateManager.state
+    val assistantState by AssistantStateManager.stateFlow.collectAsState()
 
     val dotShouldPulse = assistantState !in listOf(
         AssistantState.STOPPED, AssistantState.ERROR, AssistantState.READY

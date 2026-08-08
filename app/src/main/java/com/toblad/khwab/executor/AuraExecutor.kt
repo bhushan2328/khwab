@@ -18,10 +18,11 @@ class AuraExecutor(
 ) : AndroidExecutor {
 
     override fun supports(action: String): Boolean {
-
-        return action.equals("ACTIVATE_AURA", ignoreCase = true) ||
-                action.equals("DEACTIVATE_AURA", ignoreCase = true) ||
-                action.equals("PREVIEW_AURA_WEATHER", ignoreCase = true)
+        return action.uppercase() in setOf(
+            "ACTIVATE_AURA", "DEACTIVATE_AURA",
+            "TOGGLE_AURA", "REFRESH_AURA",
+            "PREVIEW_AURA_WEATHER"
+        )
     }
 
     override fun execute(plan: ExecutionPlan): Boolean {
@@ -39,6 +40,19 @@ class AuraExecutor(
                 "DEACTIVATE_AURA" -> {
                     AuraBridge.deactivate()
                     Log.d("AuraExecutor", "Aura deactivated.")
+                    true
+                }
+
+                "TOGGLE_AURA" -> {
+                    if (AuraBridge.isActive()) AuraBridge.deactivate()
+                    else AuraBridge.activate()
+                    Log.d("AuraExecutor", "Aura toggled.")
+                    true
+                }
+
+                "REFRESH_AURA" -> {
+                    AuraBridge.refresh()
+                    Log.d("AuraExecutor", "Aura refreshed.")
                     true
                 }
 

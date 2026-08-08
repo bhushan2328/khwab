@@ -13,11 +13,24 @@ class ExecutorRegistry(
         // Screen / UI interaction via KhwabAccessibilityService
         AccessibilityExecutor(),
 
-        // Aura Commands
+        // Aura commands
         AuraExecutor(context),
 
-        // Android Commands
-        AppExecutor(context)
+        // App launch
+        AppExecutor(context),
+
+        // Communication
+        CallExecutor(context),
+        MessageExecutor(context),
+
+        // Media playback
+        MediaExecutor(context),
+
+        // Web search
+        SearchExecutor(context),
+
+        // System settings
+        SettingExecutor(context)
 
     )
 

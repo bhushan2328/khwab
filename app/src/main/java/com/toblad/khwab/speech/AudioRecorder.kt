@@ -16,8 +16,6 @@ class AudioRecorder {
         AudioFormat.ENCODING_PCM_16BIT
     )
 
-    // Lazily created on first startRecording() call — by that point the
-    // RECORD_AUDIO permission has already been granted by the caller.
     private var recorder: AudioRecord? = null
 
     @Volatile
@@ -28,36 +26,25 @@ class AudioRecorder {
 
         if (recording) return
 
-        // Build AudioRecord here, after the permission has been confirmed.
-        if (recorder == null) {
-            recorder = AudioRecord(
-                MediaRecorder.AudioSource.MIC,
-                sampleRate,
-                AudioFormat.CHANNEL_IN_MONO,
-                AudioFormat.ENCODING_PCM_16BIT,
-                bufferSize
-            )
-        }
+        // Always create a fresh AudioRecord — reusing a stopped instance throws
+        // on some devices and produces glitched audio on others.
+        recorder = AudioRecord(
+            MediaRecorder.AudioSource.MIC,
+            sampleRate,
+            AudioFormat.CHANNEL_IN_MONO,
+            AudioFormat.ENCODING_PCM_16BIT,
+            bufferSize
+        )
 
         recording = true
         recorder!!.startRecording()
 
-        thread {
-
+        thread(name = "khwab-audio-recorder") {
             val pcm = ShortArray(bufferSize)
-
             while (recording) {
-
                 val read = recorder!!.read(pcm, 0, pcm.size)
-
                 if (read > 0) {
-
-                    val samples = FloatArray(read)
-
-                    for (i in 0 until read) {
-                        samples[i] = pcm[i] / 32768.0f
-                    }
-
+                    val samples = FloatArray(read) { pcm[it] / 32768.0f }
                     onAudio(samples)
                 }
             }
@@ -67,6 +54,9 @@ class AudioRecorder {
     fun stopRecording() {
         recording = false
         recorder?.stop()
+        // Release immediately so the next startRecording() gets a clean instance.
+        recorder?.release()
+        recorder = null
     }
 
     fun release() {

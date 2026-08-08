@@ -22,8 +22,9 @@ class WhisperEngine(
         private const val CHUNK_SAMPLES = SAMPLE_RATE * 3 / 2  // 1.5 s × 16 000 Hz
         // Silence threshold: RMS below this level is treated as silence.
         private const val SILENCE_RMS = 0.01f
-        // How many consecutive silent chunks trigger a decode + emit.
-        private const val SILENCE_CHUNKS_THRESHOLD = 3
+        // Lowered from 3 → 2: short commands ("back", "home", "yes") complete
+        // in under 0.5 s and were being merged into the next utterance.
+        private const val SILENCE_CHUNKS_THRESHOLD = 2
     }
 
     private var listener: RecognitionListener? = null
@@ -100,8 +101,10 @@ class WhisperEngine(
             silentChunkCount = 0
         }
 
+        // Lowered minimum from SAMPLE_RATE/4 (0.25 s) to SAMPLE_RATE/8 (0.125 s)
+        // so very short utterances ("yes", "no", "back") are decoded rather than discarded.
         val shouldDecode = accumulator.size >= CHUNK_SAMPLES ||
-                (silentChunkCount >= SILENCE_CHUNKS_THRESHOLD && accumulator.size > SAMPLE_RATE / 4)
+                (silentChunkCount >= SILENCE_CHUNKS_THRESHOLD && accumulator.size > SAMPLE_RATE / 8)
 
         if (!shouldDecode) return
 

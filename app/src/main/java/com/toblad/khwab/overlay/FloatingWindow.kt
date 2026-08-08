@@ -19,7 +19,10 @@ import com.toblad.khwab.R
 import com.toblad.khwab.state.AssistantState
 import kotlin.math.abs
 
-class FloatingWindow(private val context: Context) {
+class FloatingWindow(
+    private val context: Context,
+    private val onMicTap: (() -> Unit)? = null
+) {
 
     private val windowManager =
         context.getSystemService(Context.WINDOW_SERVICE) as WindowManager
@@ -201,6 +204,7 @@ class FloatingWindow(private val context: Context) {
                         snapToEdge(view, params)
                     } else {
                         v.performClick()
+                        onMicTap?.invoke()
                     }
                     true
                 }

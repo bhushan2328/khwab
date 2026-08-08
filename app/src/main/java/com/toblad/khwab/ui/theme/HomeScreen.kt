@@ -1,5 +1,8 @@
 package com.toblad.khwab.ui.theme
 
+import androidx.compose.runtime.collectAsState
+import androidx.compose.runtime.getValue
+
 import androidx.compose.animation.AnimatedContent
 import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.tween
@@ -62,7 +65,7 @@ fun HomeScreen(
     onSettingsClick: () -> Unit = {}
 ) {
     val colors = MaterialTheme.colorScheme
-    val assistantState = AssistantStateManager.state
+    val assistantState by AssistantStateManager.stateFlow.collectAsState()
 
     val auraTheme = ThemeController.currentAuraTheme
     val auraActive = ThemeController.currentTheme == ThemeMode.AURA

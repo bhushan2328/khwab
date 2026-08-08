@@ -1,16 +1,20 @@
 package com.toblad.khwab.state
 
-import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableStateOf
-import androidx.compose.runtime.setValue
+import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.asStateFlow
 
 object AssistantStateManager {
 
-    var state by mutableStateOf(AssistantState.STOPPED)
-        private set
+    private val _state = MutableStateFlow(AssistantState.STOPPED)
+
+    /** Observe this from any coroutine scope or Compose via collectAsState(). */
+    val stateFlow: StateFlow<AssistantState> = _state.asStateFlow()
+
+    /** Current value — safe to read from any thread. */
+    val state: AssistantState get() = _state.value
 
     fun updateState(newState: AssistantState) {
-        state = newState
+        _state.value = newState
     }
-
 }

@@ -1,5 +1,8 @@
 package com.toblad.khwab.ui.theme
 
+import androidx.compose.runtime.collectAsState
+import androidx.compose.runtime.getValue
+
 import androidx.compose.animation.AnimatedContent
 import androidx.compose.animation.core.FastOutSlowInEasing
 import androidx.compose.animation.core.LinearEasing
@@ -45,7 +48,7 @@ fun MicButton(
     onClick: () -> Unit
 ) {
     val colors = MaterialTheme.colorScheme
-    val state = AssistantStateManager.state
+    val state by AssistantStateManager.stateFlow.collectAsState()
     val haptic = LocalHapticFeedback.current
 
     val auraTheme = ThemeController.currentAuraTheme
