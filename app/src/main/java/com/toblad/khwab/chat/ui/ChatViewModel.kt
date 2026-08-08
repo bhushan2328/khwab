@@ -248,7 +248,8 @@ class ChatViewModel(
                                                 msg.copy(
                                                     text = answer,
                                                     status = MessageStatus.SENT,
-                                                    state = MessageState.COMPLETE
+                                                    state = MessageState.COMPLETE,
+                                                    isNew = true  // typewriter for Gemini answers too
                                                 )
                                             else msg
                                         }
@@ -291,6 +292,24 @@ class ChatViewModel(
                         status = MessageStatus.SENT,
                         state = MessageState.COMPLETE
                     ) else msg
+                }
+            )
+        }
+    }
+
+    // ── Typewriter completion ─────────────────────────────────────────────────
+
+    /**
+     * Called by [ChatBubble] once the typewriter animation finishes.
+     * Clears the [ChatMessage.isNew] flag so the message renders with full
+     * markdown on recomposition (e.g. after a theme change or scroll back).
+     */
+    fun onTypewriterFinished(messageId: Long) {
+        _uiState.update { state ->
+            state.copy(
+                messages = state.messages.map { msg ->
+                    if (msg.id == messageId && msg.isNew) msg.copy(isNew = false)
+                    else msg
                 }
             )
         }

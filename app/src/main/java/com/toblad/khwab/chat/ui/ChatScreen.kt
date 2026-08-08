@@ -241,7 +241,10 @@ fun ChatScreen(
                             }
                             is ChatListItem.MessageItem -> {
                                 item(key = item.message.id) {
-                                    ChatBubble(message = item.message)
+                                    ChatBubble(
+                                        message = item.message,
+                                        onTypewriterFinished = viewModel::onTypewriterFinished
+                                    )
                                 }
                             }
                         }

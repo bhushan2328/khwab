@@ -29,7 +29,11 @@ import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -51,12 +55,19 @@ import com.toblad.khwab.chat.model.MessageStatus
 import com.toblad.khwab.chat.model.Sender
 import com.toblad.khwab.ui.theme.ThemeController
 import com.toblad.khwab.ui.theme.ThemeMode
+import kotlinx.coroutines.delay
 import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
 
+/** How many milliseconds between each character during typewriter reveal. */
+private const val TYPEWRITER_CHAR_DELAY_MS = 18L
+
 @Composable
-fun ChatBubble(message: ChatMessage) {
+fun ChatBubble(
+    message: ChatMessage,
+    onTypewriterFinished: ((Long) -> Unit)? = null
+) {
     val colors = MaterialTheme.colorScheme
     val isUser = message.sender == Sender.USER
 
@@ -85,6 +96,28 @@ fun ChatBubble(message: ChatMessage) {
     val timeString = SimpleDateFormat("HH:mm", Locale.getDefault())
         .format(Date(message.timestamp))
 
+    // ── Typewriter state ──────────────────────────────────────────────────────
+    // Only Khwab messages flagged as isNew get the animation.
+    // displayedText grows from "" to message.text one character at a time.
+    // typingDone goes true once all characters are revealed.
+    var displayedText by remember(message.id) {
+        mutableStateOf(if (message.isNew && !isUser) "" else message.text)
+    }
+    var typingDone by remember(message.id) { mutableStateOf(!message.isNew || isUser) }
+
+    LaunchedEffect(message.id, message.isNew) {
+        if (!isUser && message.isNew && message.state != MessageState.STREAMING) {
+            // Type out each character with a small delay
+            val full = message.text
+            for (i in 1..full.length) {
+                displayedText = full.substring(0, i)
+                delay(TYPEWRITER_CHAR_DELAY_MS)
+            }
+            typingDone = true
+            onTypewriterFinished?.invoke(message.id)
+        }
+    }
+
     // Slide-in on first composition: user from right, assistant from left
     AnimatedVisibility(
         visible = true,
@@ -93,155 +126,170 @@ fun ChatBubble(message: ChatMessage) {
             initialOffsetX = { if (isUser) it / 4 else -it / 4 }
         )
     ) {
-    Row(
-        modifier = Modifier
-            .fillMaxWidth()
-            .padding(vertical = 4.dp),
-        horizontalArrangement = if (isUser) Arrangement.End else Arrangement.Start
-    ) {
-        if (isUser) {
-            // ── User bubble — wraps content width, capped at 78% / 480dp ─────
-            Card(
-                modifier = Modifier
-                    .wrapContentWidth()
-                    .widthIn(min = 72.dp, max = 480.dp)
-                    .fillMaxWidth(0.78f),
-                shape = RoundedCornerShape(
-                    topStart = 20.dp, topEnd = 20.dp,
-                    bottomStart = 20.dp, bottomEnd = 6.dp
-                ),
-                colors = CardDefaults.cardColors(containerColor = userBubbleColor)
-            ) {
-                Box(modifier = Modifier.padding(horizontal = 16.dp, vertical = 12.dp)) {
-                    Column {
-                        Text(
-                            text = buildString {
-                                append(message.text)
-                                if (message.state == MessageState.STREAMING) append("▌")
-                            },
-                            color = userTextColor,
-                            fontSize = 15.sp,
-                            fontWeight = FontWeight.Normal,
-                            lineHeight = 22.sp
-                        )
-                        Spacer(modifier = Modifier.height(4.dp))
-                        Row(
-                            verticalAlignment = Alignment.CenterVertically,
-                            horizontalArrangement = Arrangement.spacedBy(4.dp)
-                        ) {
-                            Text(
-                                text = timeString,
-                                color = userTextColor.copy(alpha = 0.55f),
-                                fontSize = 10.sp
-                            )
-                            val (icon, tint) = when (message.status) {
-                                MessageStatus.SENDING -> Icons.Default.Schedule to
-                                        userTextColor.copy(alpha = 0.55f)
-                                MessageStatus.SENT -> Icons.Default.Check to
-                                        userTextColor.copy(alpha = 0.80f)
-                                MessageStatus.ERROR -> Icons.Default.ErrorOutline to colors.error
-                            }
-                            Icon(
-                                imageVector = icon,
-                                contentDescription = message.status.name,
-                                tint = tint,
-                                modifier = Modifier.size(11.dp)
-                            )
-                        }
-                    }
-                }
-            }
-        } else {
-            // ── Khwab (assistant) bubble — rich GPT-style rendering ───────────
-            // Width capped at 0.88f (was 0.95f) so wide screens have breathing room.
-            // animateContentSize makes the in-place placeholder→answer expansion smooth.
-            // Assistant bubble: capped at 88% / 520dp for tablet comfort
-            Column(
-                modifier = Modifier
-                    .widthIn(max = 520.dp)
-                    .fillMaxWidth(0.88f)
-            ) {
-                // Khwab label row
-                Row(
-                    verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.spacedBy(6.dp),
-                    modifier = Modifier.padding(start = 4.dp, bottom = 4.dp)
-                ) {
-                    Box(
-                        modifier = Modifier
-                            .size(22.dp)
-                            .clip(RoundedCornerShape(6.dp))
-                            .background(
-                                if (auraActive)
-                                    lerp(colors.primaryContainer,
-                                        timeBubbleTint(auraTheme.timePhase), 0.3f)
-                                else colors.primaryContainer
-                            ),
-                        contentAlignment = Alignment.Center
-                    ) {
-                        Icon(
-                            imageVector = Icons.Default.AutoAwesome,
-                            contentDescription = null,
-                            tint = colors.primary,
-                            modifier = Modifier.size(13.dp)
-                        )
-                    }
-                    Text(
-                        text = "Khwab",
-                        color = colors.primary,
-                        fontSize = 11.sp,
-                        fontWeight = FontWeight.SemiBold,
-                        letterSpacing = 0.5.sp
-                    )
-                }
-
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(vertical = 4.dp),
+            horizontalArrangement = if (isUser) Arrangement.End else Arrangement.Start
+        ) {
+            if (isUser) {
+                // ── User bubble ───────────────────────────────────────────────
                 Card(
                     modifier = Modifier
-                        .fillMaxWidth()
-                        // Smooth expand when placeholder text is replaced by the full answer
-                        .animateContentSize(animationSpec = tween(durationMillis = 300)),
+                        .wrapContentWidth()
+                        .widthIn(min = 72.dp, max = 480.dp)
+                        .fillMaxWidth(0.78f),
                     shape = RoundedCornerShape(
-                        topStart = 6.dp, topEnd = 20.dp,
-                        bottomStart = 20.dp, bottomEnd = 20.dp
+                        topStart = 20.dp, topEnd = 20.dp,
+                        bottomStart = 20.dp, bottomEnd = 6.dp
                     ),
-                    colors = CardDefaults.cardColors(containerColor = assistantBubbleColor)
+                    colors = CardDefaults.cardColors(containerColor = userBubbleColor)
                 ) {
-                    Column(
-                        modifier = Modifier.padding(horizontal = 16.dp, vertical = 14.dp),
-                        verticalArrangement = Arrangement.spacedBy(0.dp)
-                    ) {
-                        if (message.state == MessageState.STREAMING) {
-                            // Streaming: plain text with cursor
+                    Box(modifier = Modifier.padding(horizontal = 16.dp, vertical = 12.dp)) {
+                        Column {
                             Text(
-                                text = buildAnnotatedString {
+                                text = buildString {
                                     append(message.text)
-                                    withStyle(SpanStyle(color = colors.primary)) { append("▌") }
+                                    if (message.state == MessageState.STREAMING) append("▌")
                                 },
-                                color = assistantTextColor,
+                                color = userTextColor,
                                 fontSize = 15.sp,
-                                lineHeight = 23.sp
+                                fontWeight = FontWeight.Normal,
+                                lineHeight = 22.sp
                             )
-                        } else {
-                            // Render markdown-like content
-                            RichAssistantText(
-                                text = message.text,
-                                textColor = assistantTextColor,
-                                accentColor = colors.primary
+                            Spacer(modifier = Modifier.height(4.dp))
+                            Row(
+                                verticalAlignment = Alignment.CenterVertically,
+                                horizontalArrangement = Arrangement.spacedBy(4.dp)
+                            ) {
+                                Text(
+                                    text = timeString,
+                                    color = userTextColor.copy(alpha = 0.55f),
+                                    fontSize = 10.sp
+                                )
+                                val (icon, tint) = when (message.status) {
+                                    MessageStatus.SENDING -> Icons.Default.Schedule to
+                                            userTextColor.copy(alpha = 0.55f)
+                                    MessageStatus.SENT -> Icons.Default.Check to
+                                            userTextColor.copy(alpha = 0.80f)
+                                    MessageStatus.ERROR -> Icons.Default.ErrorOutline to colors.error
+                                }
+                                Icon(
+                                    imageVector = icon,
+                                    contentDescription = message.status.name,
+                                    tint = tint,
+                                    modifier = Modifier.size(11.dp)
+                                )
+                            }
+                        }
+                    }
+                }
+            } else {
+                // ── Khwab (assistant) bubble ──────────────────────────────────
+                Column(
+                    modifier = Modifier
+                        .widthIn(max = 520.dp)
+                        .fillMaxWidth(0.88f)
+                ) {
+                    // Khwab label row
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(6.dp),
+                        modifier = Modifier.padding(start = 4.dp, bottom = 4.dp)
+                    ) {
+                        Box(
+                            modifier = Modifier
+                                .size(22.dp)
+                                .clip(RoundedCornerShape(6.dp))
+                                .background(
+                                    if (auraActive)
+                                        lerp(colors.primaryContainer,
+                                            timeBubbleTint(auraTheme.timePhase), 0.3f)
+                                    else colors.primaryContainer
+                                ),
+                            contentAlignment = Alignment.Center
+                        ) {
+                            Icon(
+                                imageVector = Icons.Default.AutoAwesome,
+                                contentDescription = null,
+                                tint = colors.primary,
+                                modifier = Modifier.size(13.dp)
                             )
                         }
-
-                        Spacer(modifier = Modifier.height(6.dp))
                         Text(
-                            text = timeString,
-                            color = assistantTextColor.copy(alpha = 0.45f),
-                            fontSize = 10.sp
+                            text = "Khwab",
+                            color = colors.primary,
+                            fontSize = 11.sp,
+                            fontWeight = FontWeight.SemiBold,
+                            letterSpacing = 0.5.sp
                         )
+                    }
+
+                    Card(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .animateContentSize(animationSpec = tween(durationMillis = 200)),
+                        shape = RoundedCornerShape(
+                            topStart = 6.dp, topEnd = 20.dp,
+                            bottomStart = 20.dp, bottomEnd = 20.dp
+                        ),
+                        colors = CardDefaults.cardColors(containerColor = assistantBubbleColor)
+                    ) {
+                        Column(
+                            modifier = Modifier.padding(horizontal = 16.dp, vertical = 14.dp),
+                            verticalArrangement = Arrangement.spacedBy(0.dp)
+                        ) {
+                            when {
+                                // Mid-stream acquisition placeholder
+                                message.state == MessageState.STREAMING -> {
+                                    Text(
+                                        text = buildAnnotatedString {
+                                            append(message.text)
+                                            withStyle(SpanStyle(color = colors.primary)) {
+                                                append("▌")
+                                            }
+                                        },
+                                        color = assistantTextColor,
+                                        fontSize = 15.sp,
+                                        lineHeight = 23.sp
+                                    )
+                                }
+                                // Typewriter in progress — show what's revealed so far + cursor
+                                message.isNew && !typingDone -> {
+                                    Text(
+                                        text = buildAnnotatedString {
+                                            append(displayedText)
+                                            withStyle(SpanStyle(color = colors.primary)) {
+                                                append("▌")
+                                            }
+                                        },
+                                        color = assistantTextColor,
+                                        fontSize = 15.sp,
+                                        lineHeight = 23.sp
+                                    )
+                                }
+                                // Complete — rich markdown rendering
+                                else -> {
+                                    RichAssistantText(
+                                        text = message.text,
+                                        textColor = assistantTextColor,
+                                        accentColor = colors.primary
+                                    )
+                                }
+                            }
+
+                            Spacer(modifier = Modifier.height(6.dp))
+                            Text(
+                                text = timeString,
+                                color = assistantTextColor.copy(alpha = 0.45f),
+                                fontSize = 10.sp
+                            )
+                        }
                     }
                 }
             }
         }
     }
-    } // end AnimatedVisibility
 }
 
 /**
@@ -310,7 +358,6 @@ private fun RichAssistantText(
                         )
                     }
                 }
-                // Numbered list: "1. ", "2. ", ... "99. "
                 line.matches(Regex("^\\d+\\.\\s+.*")) -> {
                     val dotIdx = line.indexOf('.')
                     val num = line.substring(0, dotIdx)
@@ -348,9 +395,7 @@ private fun RichAssistantText(
     }
 }
 
-/**
- * Parses a single line for inline markdown: **bold**, *italic*, `code`.
- */
+/** Parses a single line for inline markdown: **bold**, *italic*, `code`. */
 private fun parseInlineMarkdown(
     text: String,
     defaultColor: Color,
@@ -359,7 +404,6 @@ private fun parseInlineMarkdown(
     var i = 0
     while (i < text.length) {
         when {
-            // **bold**
             text.startsWith("**", i) -> {
                 val end = text.indexOf("**", i + 2)
                 if (end != -1) {
@@ -367,11 +411,8 @@ private fun parseInlineMarkdown(
                         append(text.substring(i + 2, end))
                     }
                     i = end + 2
-                } else {
-                    append(text[i]); i++
-                }
+                } else { append(text[i]); i++ }
             }
-            // *italic*
             text.startsWith("*", i) && !text.startsWith("**", i) -> {
                 val end = text.indexOf("*", i + 1)
                 if (end != -1) {
@@ -379,11 +420,8 @@ private fun parseInlineMarkdown(
                         append(text.substring(i + 1, end))
                     }
                     i = end + 1
-                } else {
-                    append(text[i]); i++
-                }
+                } else { append(text[i]); i++ }
             }
-            // `code`
             text.startsWith("`", i) -> {
                 val end = text.indexOf("`", i + 1)
                 if (end != -1) {
@@ -394,13 +432,9 @@ private fun parseInlineMarkdown(
                             fontSize = 13.sp,
                             background = accentColor.copy(alpha = 0.10f)
                         )
-                    ) {
-                        append(text.substring(i + 1, end))
-                    }
+                    ) { append(text.substring(i + 1, end)) }
                     i = end + 1
-                } else {
-                    append(text[i]); i++
-                }
+                } else { append(text[i]); i++ }
             }
             else -> { append(text[i]); i++ }
         }
@@ -413,11 +447,11 @@ private fun weatherBubbleTint(weather: WeatherState): Color = when (weather) {
     WeatherState.RAIN   -> Color(0xFF4A8FCC)
     WeatherState.SNOW   -> Color(0xFFB8D8F0)
     WeatherState.FOG    -> Color(0xFFA9B0B4)
-    WeatherState.STORM  -> Color(0xFF5C7A9E)   // fix #13: brighter steel blue, was near-black
+    WeatherState.STORM  -> Color(0xFF5C7A9E)
 }
 
 private fun timeBubbleTint(phase: TimePhase): Color = when (phase) {
-    TimePhase.PRE_DAWN  -> Color(0xFF2D2B6E)   // fix #12: soft indigo, was near-black
+    TimePhase.PRE_DAWN  -> Color(0xFF2D2B6E)
     TimePhase.SUNRISE   -> Color(0xFFFF9A6C)
     TimePhase.MORNING   -> Color(0xFF5FC7FF)
     TimePhase.NOON      -> Color(0xFF3AD1FF)
