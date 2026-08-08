@@ -141,7 +141,7 @@ fun HomeScreen(
 
             Spacer(modifier = Modifier.height(12.dp))
 
-            // ── Secondary actions: Chat + Settings side by side ───────────────
+            // ── Secondary actions: Chat + Settings — outlined for visual hierarchy
             Row(
                 modifier = Modifier.fillMaxWidth(0.88f),
                 horizontalArrangement = Arrangement.spacedBy(12.dp)
@@ -150,6 +150,7 @@ fun HomeScreen(
                     text = "Chat",
                     icon = icons.chat,
                     backgroundColor = colors.primary,
+                    outlined = true,
                     modifier = Modifier.weight(1f),
                     onClick = onChatClick
                 )
@@ -157,6 +158,7 @@ fun HomeScreen(
                     text = "Settings",
                     icon = icons.settings,
                     backgroundColor = colors.tertiary,
+                    outlined = true,
                     modifier = Modifier.weight(1f),
                     onClick = onSettingsClick
                 )

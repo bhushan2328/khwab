@@ -106,26 +106,36 @@ class MainActivity : ComponentActivity() {
                         },
 
                         onChatClick = {
-
-                            startActivity(
-                                Intent(
-                                    this@MainActivity,
-                                    ChatActivity::class.java
-                                )
-                            )
-
-                        },
-
-                        onSettingsClick = {
-
-                            startActivity(
-                                Intent(
-                                    this@MainActivity,
-                                    SettingsActivity::class.java
-                                )
-                            )
-
-                        }
+                
+                                            startActivity(
+                                                Intent(
+                                                    this@MainActivity,
+                                                    ChatActivity::class.java
+                                                )
+                                            )
+                                            @Suppress("DEPRECATION")
+                                            overridePendingTransition(
+                                                android.R.anim.fade_in,
+                                                android.R.anim.fade_out
+                                            )
+                
+                                        },
+                
+                                        onSettingsClick = {
+                
+                                            startActivity(
+                                                Intent(
+                                                    this@MainActivity,
+                                                    SettingsActivity::class.java
+                                                )
+                                            )
+                                            @Suppress("DEPRECATION")
+                                            overridePendingTransition(
+                                                android.R.anim.fade_in,
+                                                android.R.anim.fade_out
+                                            )
+                
+                                        }
 
                     )
                 }

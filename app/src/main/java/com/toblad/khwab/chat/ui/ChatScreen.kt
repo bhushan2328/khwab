@@ -1,8 +1,15 @@
 package com.toblad.khwab.chat.ui
 
 import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.core.FastOutSlowInEasing
+import androidx.compose.animation.core.RepeatMode
+import androidx.compose.animation.core.animateFloat
+import androidx.compose.animation.core.infiniteRepeatable
+import androidx.compose.animation.core.rememberInfiniteTransition
+import androidx.compose.animation.core.tween
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
+import androidx.compose.animation.slideInVertically
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -24,6 +31,7 @@ import androidx.compose.material3.Icon
 import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Scaffold
+import androidx.compose.material3.SuggestionChip
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
@@ -32,6 +40,7 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.scale
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
@@ -185,7 +194,7 @@ fun ChatScreen(
 
             if (groupedItems.isEmpty() && !uiState.isTyping) {
                 // ── Empty state ─────────────────────────────────────────────
-                ChatEmptyState()
+                ChatEmptyState(onSuggestionClick = viewModel::onInputChanged)
             } else {
                 LazyColumn(
                     modifier = Modifier.fillMaxSize(),
@@ -296,49 +305,91 @@ private fun buildGroupedItems(messages: List<ChatMessage>): List<ChatListItem> {
 
 // ── Empty state ───────────────────────────────────────────────────────────────
 
+private val suggestionChips = listOf(
+    "What's the weather today?",
+    "Set a reminder",
+    "Tell me a joke"
+)
+
 @Composable
-private fun ChatEmptyState() {
+private fun ChatEmptyState(onSuggestionClick: (String) -> Unit = {}) {
     val colors = MaterialTheme.colorScheme
 
-    Box(
-        modifier = Modifier.fillMaxSize(),
-        contentAlignment = Alignment.Center
+    // Breathing animation for the icon badge
+    val breathTransition = rememberInfiniteTransition(label = "empty_breath")
+    val breathScale by breathTransition.animateFloat(
+        initialValue = 1.0f,
+        targetValue  = 1.06f,
+        animationSpec = infiniteRepeatable(
+            animation = tween(durationMillis = 2000, easing = FastOutSlowInEasing),
+            repeatMode = RepeatMode.Reverse
+        ),
+        label = "badge_scale"
+    )
+
+    AnimatedVisibility(
+        visible = true,
+        enter = fadeIn(tween(400)) + slideInVertically(
+            animationSpec = tween(400),
+            initialOffsetY = { it / 5 }
+        )
     ) {
-        Column(
-            horizontalAlignment = Alignment.CenterHorizontally,
-            verticalArrangement = Arrangement.spacedBy(12.dp),
-            modifier = Modifier.padding(horizontal = 40.dp)
+        Box(
+            modifier = Modifier.fillMaxSize(),
+            contentAlignment = Alignment.Center
         ) {
-            // Icon badge — same style as ChatTopBar avatar
-            Surface(
-                shape = RoundedCornerShape(20.dp),
-                color = colors.primaryContainer.copy(alpha = 0.7f)
+            Column(
+                horizontalAlignment = Alignment.CenterHorizontally,
+                verticalArrangement = Arrangement.spacedBy(12.dp),
+                modifier = Modifier.padding(horizontal = 40.dp)
             ) {
-                Icon(
-                    imageVector = Icons.Default.AutoAwesome,
-                    contentDescription = null,
-                    tint = colors.primary,
-                    modifier = Modifier
-                        .padding(20.dp)
-                        .size(40.dp)
+                // Breathing icon badge
+                Surface(
+                    shape = RoundedCornerShape(20.dp),
+                    color = colors.primaryContainer.copy(alpha = 0.7f),
+                    modifier = Modifier.scale(breathScale)
+                ) {
+                    Icon(
+                        imageVector = Icons.Default.AutoAwesome,
+                        contentDescription = null,
+                        tint = colors.primary,
+                        modifier = Modifier
+                            .padding(20.dp)
+                            .size(40.dp)
+                    )
+                }
+
+                Spacer(modifier = Modifier.height(4.dp))
+
+                Text(
+                    text = "Start a conversation",
+                    style = MaterialTheme.typography.titleMedium,
+                    color = colors.onSurface,
+                    textAlign = TextAlign.Center
                 )
+
+                Text(
+                    text = "Ask me anything — I'm your intelligent voice companion.",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = colors.onSurfaceVariant,
+                    textAlign = TextAlign.Center
+                )
+
+                Spacer(modifier = Modifier.height(8.dp))
+
+                // Suggestion chips — tap to pre-fill the input
+                suggestionChips.forEach { suggestion ->
+                    SuggestionChip(
+                        onClick = { onSuggestionClick(suggestion) },
+                        label = {
+                            Text(
+                                text = suggestion,
+                                style = MaterialTheme.typography.bodySmall
+                            )
+                        }
+                    )
+                }
             }
-
-            Spacer(modifier = Modifier.height(4.dp))
-
-            Text(
-                text = "Start a conversation",
-                style = MaterialTheme.typography.titleMedium,
-                color = colors.onSurface,
-                textAlign = TextAlign.Center
-            )
-
-            Text(
-                text = "Ask me anything — I'm your intelligent voice companion.",
-                style = MaterialTheme.typography.bodySmall,
-                color = colors.onSurfaceVariant,
-                textAlign = TextAlign.Center
-            )
         }
     }
 }

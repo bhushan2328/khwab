@@ -1,7 +1,10 @@
 package com.toblad.khwab.chat.ui
 
+import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.animateContentSize
 import androidx.compose.animation.core.tween
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.slideInHorizontally
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -82,6 +85,14 @@ fun ChatBubble(message: ChatMessage) {
     val timeString = SimpleDateFormat("HH:mm", Locale.getDefault())
         .format(Date(message.timestamp))
 
+    // Slide-in on first composition: user from right, assistant from left
+    AnimatedVisibility(
+        visible = true,
+        enter = fadeIn(tween(220)) + slideInHorizontally(
+            animationSpec = tween(260),
+            initialOffsetX = { if (isUser) it / 4 else -it / 4 }
+        )
+    ) {
     Row(
         modifier = Modifier
             .fillMaxWidth()
@@ -230,6 +241,7 @@ fun ChatBubble(message: ChatMessage) {
             }
         }
     }
+    } // end AnimatedVisibility
 }
 
 /**
