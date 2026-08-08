@@ -5,6 +5,7 @@ import android.animation.AnimatorSet
 import android.animation.ValueAnimator
 import android.annotation.SuppressLint
 import android.content.Context
+import android.content.Intent
 import android.graphics.PixelFormat
 import android.os.Build
 import android.os.Handler
@@ -16,6 +17,7 @@ import android.view.View
 import android.view.WindowManager
 import android.widget.ImageView
 import com.toblad.khwab.R
+import com.toblad.khwab.service.VoiceService
 import com.toblad.khwab.state.AssistantState
 import kotlin.math.abs
 
@@ -30,6 +32,11 @@ class FloatingWindow(
     private var floatingView: View? = null
     private var micButton: ImageView? = null
     private var layoutParams: WindowManager.LayoutParams? = null
+
+    // Semi-transparent dismiss zone shown at the bottom during drag.
+    private var dismissZoneView: View? = null
+    private var dismissZoneParams: WindowManager.LayoutParams? = null
+    private var dismissZoneVisible = false
 
     private var activeAnimator: AnimatorSet? = null
     private var activeSingleAnimator: android.animation.Animator? = null
@@ -53,16 +60,8 @@ class FloatingWindow(
         floatingView = LayoutInflater.from(context).inflate(R.layout.floating_mic, null)
         micButton = floatingView!!.findViewById(R.id.micButton)
 
-        val screenWidth = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
-            windowManager.currentWindowMetrics.bounds.width()
-        } else {
-            context.resources.displayMetrics.widthPixels
-        }
-        val screenHeight = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
-            windowManager.currentWindowMetrics.bounds.height()
-        } else {
-            context.resources.displayMetrics.heightPixels
-        }
+        val screenWidth = screenWidth()
+        val screenHeight = screenHeight()
 
         layoutParams = WindowManager.LayoutParams(
             WindowManager.LayoutParams.WRAP_CONTENT,
@@ -76,7 +75,6 @@ class FloatingWindow(
             PixelFormat.TRANSLUCENT
         ).apply {
             gravity = Gravity.TOP or Gravity.START
-            // Density-aware starting position: upper-right zone
             x = (screenWidth * 0.80).toInt()
             y = (screenHeight * 0.30).toInt()
         }
@@ -86,6 +84,7 @@ class FloatingWindow(
     }
 
     fun hide() {
+        hideDismissZone()
         stopAnimation()
         floatingView?.let {
             windowManager.removeView(it)
@@ -101,7 +100,6 @@ class FloatingWindow(
             val btn = micButton ?: return@post
             stopAnimation()
             btn.setBackgroundResource(backgroundFor(state))
-            // reset transforms left over from prior animations
             btn.translationX = 0f
             btn.translationY = 0f
             btn.rotation    = 0f
@@ -115,7 +113,6 @@ class FloatingWindow(
     private fun startAnimationFor(state: AssistantState, target: View) {
         when (state) {
             AssistantState.LISTENING -> {
-                // gentle pulse — scale in/out
                 val anim = AnimatorInflater
                     .loadAnimator(context, R.animator.mic_pulse) as AnimatorSet
                 anim.setTarget(target)
@@ -123,7 +120,6 @@ class FloatingWindow(
                 activeAnimator = anim
             }
             AssistantState.THINKING -> {
-                // continuous rotation
                 val anim = AnimatorInflater
                     .loadAnimator(context, R.animator.mic_spin)
                 anim.setTarget(target)
@@ -131,7 +127,6 @@ class FloatingWindow(
                 activeSingleAnimator = anim
             }
             AssistantState.EXECUTING -> {
-                // bounce up/down
                 val anim = AnimatorInflater
                     .loadAnimator(context, R.animator.mic_bounce) as AnimatorSet
                 anim.setTarget(target)
@@ -139,7 +134,6 @@ class FloatingWindow(
                 activeAnimator = anim
             }
             AssistantState.SPEAKING -> {
-                // fast side-to-side wiggle
                 val anim = AnimatorInflater
                     .loadAnimator(context, R.animator.mic_wiggle) as AnimatorSet
                 anim.setTarget(target)
@@ -147,16 +141,14 @@ class FloatingWindow(
                 activeAnimator = anim
             }
             AssistantState.ERROR -> {
-                // one-shot hard shake, then back to idle
                 val anim = AnimatorInflater
                     .loadAnimator(context, R.animator.mic_shake) as AnimatorSet
                 anim.setTarget(target)
                 anim.start()
                 activeAnimator = anim
-                // after shake completes (~600 ms) revert to idle automatically
                 mainHandler.postDelayed({ setState(AssistantState.READY) }, 700)
             }
-            else -> { /* STOPPED / READY — no animation, just idle colour */ }
+            else -> { /* STOPPED / READY — no animation */ }
         }
     }
 
@@ -167,7 +159,7 @@ class FloatingWindow(
         activeSingleAnimator = null
     }
 
-    // ── drag + edge-snap ───────────────────────────────────────────────────
+    // ── drag + edge-snap + dismiss zone ───────────────────────────────────
     @SuppressLint("ClickableViewAccessibility")
     private fun attachDragListener() {
         val view = floatingView ?: return
@@ -191,17 +183,30 @@ class FloatingWindow(
                 MotionEvent.ACTION_MOVE -> {
                     val dx = (event.rawX - initialTouchX).toInt()
                     val dy = (event.rawY - initialTouchY).toInt()
-                    if (!isDragging && (abs(dx) > 8 || abs(dy) > 8)) isDragging = true
+                    if (!isDragging && (abs(dx) > 8 || abs(dy) > 8)) {
+                        isDragging = true
+                        showDismissZone()
+                    }
                     if (isDragging) {
                         params.x = initialX + dx
                         params.y = initialY + dy
                         windowManager.updateViewLayout(view, params)
+
+                        // Highlight dismiss zone when button is dragged near the bottom.
+                        val nearBottom = event.rawY > screenHeight() * 0.80f
+                        dismissZoneView?.alpha = if (nearBottom) 0.85f else 0.45f
                     }
                     true
                 }
                 MotionEvent.ACTION_UP -> {
+                    hideDismissZone()
                     if (isDragging) {
-                        snapToEdge(view, params)
+                        // If released over the bottom dismiss zone → stop service
+                        if (event.rawY > screenHeight() * 0.82f) {
+                            context.stopService(Intent(context, VoiceService::class.java))
+                        } else {
+                            snapToEdge(view, params)
+                        }
                     } else {
                         v.performClick()
                         onMicTap?.invoke()
@@ -213,19 +218,55 @@ class FloatingWindow(
         }
     }
 
-    private fun snapToEdge(view: View, params: WindowManager.LayoutParams) {
-        val screenWidth = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
-            windowManager.currentWindowMetrics.bounds.width()
-        } else {
-            context.resources.displayMetrics.widthPixels
+    // ── dismiss zone overlay ───────────────────────────────────────────────
+
+    private fun showDismissZone() {
+        if (dismissZoneVisible) return
+        dismissZoneVisible = true
+
+        val zoneView = View(context).apply {
+            setBackgroundColor(0xBB_CC0000.toInt())  // translucent red strip
+            alpha = 0.45f
         }
 
-        val buttonWidth = view.width.takeIf { it > 0 } ?: 164  // 64dp approx
-        val margin = 24
-        val targetX = if (params.x + buttonWidth / 2 < screenWidth / 2) margin
-                      else screenWidth - buttonWidth - margin
+        val height = (screenHeight() * 0.12f).toInt()
+        val zoneParams = WindowManager.LayoutParams(
+            WindowManager.LayoutParams.MATCH_PARENT,
+            height,
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O)
+                WindowManager.LayoutParams.TYPE_APPLICATION_OVERLAY
+            else
+                @Suppress("DEPRECATION")
+                WindowManager.LayoutParams.TYPE_PHONE,
+            WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE or
+                WindowManager.LayoutParams.FLAG_NOT_TOUCHABLE,
+            PixelFormat.TRANSLUCENT
+        ).apply {
+            gravity = Gravity.BOTTOM or Gravity.START
+        }
 
-        // fix #12: decelerate easing + longer duration for natural snap feel
+        dismissZoneView   = zoneView
+        dismissZoneParams = zoneParams
+        windowManager.addView(zoneView, zoneParams)
+    }
+
+    private fun hideDismissZone() {
+        dismissZoneView?.let {
+            runCatching { windowManager.removeView(it) }
+            dismissZoneView   = null
+            dismissZoneParams = null
+            dismissZoneVisible = false
+        }
+    }
+
+    // ── edge snap ─────────────────────────────────────────────────────────
+    private fun snapToEdge(view: View, params: WindowManager.LayoutParams) {
+        val sw = screenWidth()
+        val buttonWidth = view.width.takeIf { it > 0 } ?: 164
+        val margin = 24
+        val targetX = if (params.x + buttonWidth / 2 < sw / 2) margin
+                      else sw - buttonWidth - margin
+
         ValueAnimator.ofInt(params.x, targetX).apply {
             duration = 320
             interpolator = android.view.animation.DecelerateInterpolator(2f)
@@ -236,4 +277,13 @@ class FloatingWindow(
             start()
         }
     }
+
+    // ── helpers ───────────────────────────────────────────────────────────
+    private fun screenWidth() = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R)
+        windowManager.currentWindowMetrics.bounds.width()
+    else context.resources.displayMetrics.widthPixels
+
+    private fun screenHeight() = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R)
+        windowManager.currentWindowMetrics.bounds.height()
+    else context.resources.displayMetrics.heightPixels
 }
