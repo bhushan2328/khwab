@@ -387,9 +387,13 @@ class VoiceService : Service() {
         }
 
         // ── READ_SCREEN: speak captured text ──────────────────────────────────
-        val screenReadText = KhwabAccessibilityService.instance.get()
-            ?.lastScreenReadResult
-            ?.also { KhwabAccessibilityService.instance.get()?.lastScreenReadResult = null }
+        // Read the service reference once so both the read and the clear operate
+        // on the same object (avoids a TOCTOU if the service is replaced between calls).
+        val screenReadText = KhwabAccessibilityService.instance.get()?.let { svc ->
+            val text = svc.lastScreenReadResult
+            if (text != null) svc.lastScreenReadResult = null
+            text
+        }
 
         // Priority: screen-read text > Core response message.
         val responseText = screenReadText?.takeIf { it.isNotBlank() } ?: response.message

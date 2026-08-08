@@ -284,7 +284,7 @@ class KhwabAccessibilityService : AccessibilityService() {
 
     /**
      * Scrolls a scrollable container to the top by repeatedly performing
-     * SCROLL_BACKWARD until the action no longer changes the view.
+     * SCROLL_BACKWARD until the action returns false (no further scroll possible).
      * Capped at 50 iterations to prevent an infinite loop.
      */
     @Suppress("DEPRECATION")
@@ -293,10 +293,10 @@ class KhwabAccessibilityService : AccessibilityService() {
         return try {
             val scrollable = findScrollable(root) ?: return false
             var scrolled = false
-            repeat(50) {
-                if (scrollable.performAction(AccessibilityNodeInfo.ACTION_SCROLL_BACKWARD))
-                    scrolled = true
-                else return@repeat
+            var i = 0
+            while (i < 50 && scrollable.performAction(AccessibilityNodeInfo.ACTION_SCROLL_BACKWARD)) {
+                scrolled = true
+                i++
             }
             scrolled
         } finally {
@@ -306,7 +306,7 @@ class KhwabAccessibilityService : AccessibilityService() {
 
     /**
      * Scrolls a scrollable container to the bottom by repeatedly performing
-     * SCROLL_FORWARD until the action no longer changes the view.
+     * SCROLL_FORWARD until the action returns false (no further scroll possible).
      * Capped at 50 iterations to prevent an infinite loop.
      */
     @Suppress("DEPRECATION")
@@ -315,10 +315,10 @@ class KhwabAccessibilityService : AccessibilityService() {
         return try {
             val scrollable = findScrollable(root) ?: return false
             var scrolled = false
-            repeat(50) {
-                if (scrollable.performAction(AccessibilityNodeInfo.ACTION_SCROLL_FORWARD))
-                    scrolled = true
-                else return@repeat
+            var i = 0
+            while (i < 50 && scrollable.performAction(AccessibilityNodeInfo.ACTION_SCROLL_FORWARD)) {
+                scrolled = true
+                i++
             }
             scrolled
         } finally {
