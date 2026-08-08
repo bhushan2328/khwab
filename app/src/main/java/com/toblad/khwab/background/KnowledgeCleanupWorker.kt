@@ -1,13 +1,14 @@
 package com.toblad.khwab.background
 
 import android.content.Context
-import android.util.Log
 import androidx.work.CoroutineWorker
 import androidx.work.PeriodicWorkRequestBuilder
 import androidx.work.WorkManager
 import androidx.work.WorkerParameters
 import com.toblad.khwab.db.KhwabDatabase
 import com.toblad.khwab.db.repository.RoomTemporaryKnowledgeRepository
+import com.toblad.khwab.logging.LogModule
+import com.toblad.khwab.logging.Logger
 import java.util.concurrent.TimeUnit
 
 /**
@@ -38,7 +39,7 @@ class KnowledgeCleanupWorker(
                     request
                 )
 
-            Log.d(TAG, "Cleanup worker scheduled")
+            Logger.debug(LogModule.SYSTEM, "Cleanup worker scheduled")
         }
     }
 
@@ -48,10 +49,10 @@ class KnowledgeCleanupWorker(
                 KhwabDatabase.getInstance(applicationContext).temporaryKnowledgeDao()
             )
             val deleted = repo.purgeExpired()
-            Log.d(TAG, "Cleanup: deleted $deleted expired records")
+            Logger.debug(LogModule.SYSTEM, "Cleanup: deleted $deleted expired records")
             Result.success()
         } catch (e: Exception) {
-            Log.e(TAG, "Cleanup failed: ${e.message}")
+            Logger.error(LogModule.SYSTEM, "Cleanup failed: ${e.message}", e)
             Result.failure()
         }
     }

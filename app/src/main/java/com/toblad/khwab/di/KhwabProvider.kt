@@ -10,11 +10,11 @@ import com.toblad.khwab.db.repository.RoomTemporaryKnowledgeRepository
 import com.toblad.khwab.integration.api.KhwabIntegration
 import com.toblad.khwab.integration.bridge.core.DefaultCoreBridge
 import com.toblad.khwab.integration.internal.DefaultKhwabIntegration
-import com.toblad.khwab.integration.openai.FallbackLLMClient
-import com.toblad.khwab.integration.openai.GeminiClient
-import com.toblad.khwab.integration.openai.GeminiConfig
-import com.toblad.khwab.integration.openai.OpenRouterClient
-import com.toblad.khwab.integration.openai.OpenRouterConfig
+import com.toblad.khwab.integration.llm.providers.FallbackLLMClient
+import com.toblad.khwab.integration.llm.providers.GeminiClient
+import com.toblad.khwab.integration.llm.providers.GeminiConfig
+import com.toblad.khwab.integration.llm.providers.OpenRouterClient
+import com.toblad.khwab.integration.llm.providers.OpenRouterConfig
 
 /**
  * Application-scoped dependency provider.
@@ -35,6 +35,16 @@ object KhwabProvider {
     var llmClient: FallbackLLMClient? = null
         private set
 
+    /** Shared permanent memory repository — reused by KnowledgeAcquisitionWorker. */
+    @Volatile
+    var permanentMemory: RoomPermanentMemory? = null
+        private set
+
+    /** Shared temporary knowledge repository — reused by KnowledgeAcquisitionWorker. */
+    @Volatile
+    var temporaryKnowledge: RoomTemporaryKnowledgeRepository? = null
+        private set
+
     fun init(context: Context) {
         if (_chatEngine != null) return
         synchronized(this) {
@@ -43,8 +53,10 @@ object KhwabProvider {
             val appContext = context.applicationContext
             val db = KhwabDatabase.getInstance(appContext)
 
-            val permanentMemory = RoomPermanentMemory(db.permanentMemoryDao())
-            val temporaryKnowledge = RoomTemporaryKnowledgeRepository(db.temporaryKnowledgeDao())
+            val pm = RoomPermanentMemory(db.permanentMemoryDao())
+                .also { permanentMemory = it }
+            val tk = RoomTemporaryKnowledgeRepository(db.temporaryKnowledgeDao())
+                .also { temporaryKnowledge = it }
 
             val client = FallbackLLMClient(
                 primary = GeminiClient(GeminiConfig(apiKey = BuildConfig.GEMINI_API_KEY)),
@@ -52,8 +64,8 @@ object KhwabProvider {
             ).also { llmClient = it }
 
             val bridge = DefaultCoreBridge(
-                permanentMemory = permanentMemory,
-                temporaryKnowledge = temporaryKnowledge,
+                permanentMemory = pm,
+                temporaryKnowledge = tk,
                 llmClient = client
             )
 
@@ -73,3 +85,4 @@ object KhwabProvider {
         get() = _integration
             ?: error("KhwabProvider not initialized. Call KhwabProvider.init(context) first.")
 }
+

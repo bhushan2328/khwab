@@ -1,7 +1,6 @@
 package com.toblad.khwab.background
 
 import android.content.Context
-import android.util.Log
 import androidx.work.Constraints
 import androidx.work.CoroutineWorker
 import androidx.work.NetworkType
@@ -13,15 +12,18 @@ import com.toblad.khwab.BuildConfig
 import com.toblad.khwab.db.KhwabDatabase
 import com.toblad.khwab.db.repository.RoomPermanentMemory
 import com.toblad.khwab.db.repository.RoomTemporaryKnowledgeRepository
+import com.toblad.khwab.integration.bridge.core.GEMINI_MODEL
 import com.toblad.khwab.integration.llm.LLMService
-import com.toblad.khwab.integration.openai.FallbackLLMClient
-import com.toblad.khwab.integration.openai.GeminiClient
-import com.toblad.khwab.integration.openai.GeminiConfig
-import com.toblad.khwab.integration.openai.LLMKnowledgeExtractor
-import com.toblad.khwab.integration.openai.OpenRouterClient
-import com.toblad.khwab.integration.openai.OpenRouterConfig
-import com.toblad.khwab.integration.openai.RelatedPromptBuilder
+import com.toblad.khwab.integration.llm.providers.FallbackLLMClient
+import com.toblad.khwab.integration.llm.providers.GeminiClient
+import com.toblad.khwab.integration.llm.providers.GeminiConfig
+import com.toblad.khwab.integration.llm.providers.LLMKnowledgeExtractor
+import com.toblad.khwab.integration.llm.providers.OpenRouterClient
+import com.toblad.khwab.integration.llm.providers.OpenRouterConfig
+import com.toblad.khwab.integration.llm.providers.RelatedPromptBuilder
 import com.toblad.khwab.di.KhwabProvider
+import com.toblad.khwab.logging.LogModule
+import com.toblad.khwab.logging.Logger
 import kotlinx.coroutines.async
 import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.withTimeout
@@ -88,7 +90,7 @@ class KnowledgeAcquisitionWorker(
                     request
                 )
 
-            Log.d(TAG, "Enqueued acquisition for: $normKey (id=${request.id})")
+            Logger.debug(LogModule.AI, "Enqueued acquisition for: $normKey (id=${request.id})")
             return request.id
         }
     }
@@ -104,7 +106,7 @@ class KnowledgeAcquisitionWorker(
             .chunked(2)
             .mapNotNull { chunk -> if (chunk.size == 2) chunk[0] to chunk[1] else null }
 
-        Log.d(TAG, "Starting knowledge acquisition: $query (history=${conversationHistory.size} turns)")
+        Logger.debug(LogModule.AI, "Starting knowledge acquisition: $query (history=${conversationHistory.size} turns)")
 
         val db = KhwabDatabase.getInstance(applicationContext)
 
@@ -126,12 +128,18 @@ class KnowledgeAcquisitionWorker(
         val llmService = LLMService(client)
         val promptBuilder = RelatedPromptBuilder()
         val extractor = LLMKnowledgeExtractor()
-        val repo = RoomTemporaryKnowledgeRepository(db.temporaryKnowledgeDao())
+
+        // Reuse shared repositories from KhwabProvider when available; fall back to fresh
+        // instances only if the provider has not yet been initialised (rare edge case).
+        val repo = KhwabProvider.temporaryKnowledge
+            ?: RoomTemporaryKnowledgeRepository(db.temporaryKnowledgeDao())
+        val permMemory = KhwabProvider.permanentMemory
+            ?: RoomPermanentMemory(db.permanentMemoryDao())
 
         // Gather relevant memory context to enrich the prompts
         val memoryContext = buildMemoryContext(
             query = query,
-            permanentMemory = RoomPermanentMemory(db.permanentMemoryDao()),
+            permanentMemory = permMemory,
             temporaryRepo = repo
         )
 
@@ -144,7 +152,7 @@ class KnowledgeAcquisitionWorker(
                 // Fire the primary prompt first — it's the one shown to the user.
                 // Only burn extra quota on context/related if the primary succeeds,
                 // to preserve free-tier limits (Gemini: 15 req/min, 1500/day).
-                val primary = llmService.generate(prompts.primaryPrompt, "gemini-2.0-flash")
+                val primary = llmService.generate(prompts.primaryPrompt, GEMINI_MODEL)
                 var savedCount = 0
 
                 primary?.let { r ->
@@ -158,10 +166,10 @@ class KnowledgeAcquisitionWorker(
                 // Only fire enrichment calls if primary gave a usable answer
                 if (primaryAnswer != null) {
                     val contextDeferred = async {
-                        llmService.generate(prompts.contextPrompt, "gemini-2.0-flash")
+                        llmService.generate(prompts.contextPrompt, GEMINI_MODEL)
                     }
                     val relatedDeferred = async {
-                        llmService.generate(prompts.relatedPrompt, "gemini-2.0-flash")
+                        llmService.generate(prompts.relatedPrompt, GEMINI_MODEL)
                     }
                     contextDeferred.await()?.let { r ->
                         extractor.extract(query, r, "::context")?.let { record ->
@@ -177,19 +185,22 @@ class KnowledgeAcquisitionWorker(
                     }
                 }
 
-                Log.d(TAG, "Acquisition complete: $savedCount records saved for '$query'")
-                client.close()
+                Logger.debug(LogModule.AI, "Acquisition complete: $savedCount records saved for '$query'")
+                // Only close the client if this worker owns it (not the shared provider instance).
+                if (client !== KhwabProvider.llmClient) {
+                    try { client.close() } catch (_: Exception) {}
+                }
             }
 
             val answer = primaryAnswer
             if (answer != null) {
                 Result.success(workDataOf(KEY_ANSWER to answer))
             } else {
-                Log.w(TAG, "No extractable answer for '$query'")
+                Logger.warning(LogModule.AI, "No extractable answer for '$query'")
                 Result.failure()
             }
         } catch (e: Exception) {
-            Log.e(TAG, "Acquisition failed for '$query': ${e.message}")
+            Logger.error(LogModule.AI, "Acquisition failed for '$query': ${e.message}")
             // Only close if it's NOT the shared provider client
             if (client !== KhwabProvider.llmClient) {
                 try { client.close() } catch (_: Exception) {}
@@ -233,3 +244,4 @@ class KnowledgeAcquisitionWorker(
         return sb.toString().trim()
     }
 }
+

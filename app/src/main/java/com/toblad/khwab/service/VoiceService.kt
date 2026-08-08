@@ -14,8 +14,8 @@ import com.toblad.khwab.executor.AndroidExecutionEngine
 import com.toblad.khwab.integration.api.KhwabIntegration
 import com.toblad.khwab.integration.api.request.IntegrationRequest
 import com.toblad.khwab.integration.llm.LLMService
-import com.toblad.khwab.integration.openai.LLMKnowledgeExtractor
-import com.toblad.khwab.integration.openai.RelatedPromptBuilder
+import com.toblad.khwab.integration.llm.providers.LLMKnowledgeExtractor
+import com.toblad.khwab.integration.llm.providers.RelatedPromptBuilder
 import com.toblad.khwab.logging.LogModule
 import com.toblad.khwab.logging.Logger
 import com.toblad.khwab.overlay.FloatingWindow
@@ -411,3 +411,4 @@ class VoiceService : Service() {
         tts?.speak(clean, TextToSpeech.QUEUE_FLUSH, null, "khwab_tts")
     }
 }
+

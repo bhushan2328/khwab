@@ -12,6 +12,7 @@ import com.toblad.khwab.environment.AuraSyncScheduler
 import com.toblad.khwab.ui.theme.ThemeController
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -40,13 +41,15 @@ object AuraBridge {
 
     private val aura: AuraApi = AuraManager()
 
-    private val scope = CoroutineScope(Dispatchers.Main)
+    private val scope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
 
+    @Volatile
     private var configStore: AuraConfigStore? = null
     private var environmentSync: AuraEnvironmentSync? = null
     private var syncScheduler: AuraSyncScheduler? = null
     private var ambientSound: AmbientSoundController? = null
 
+    @Volatile
     private var initialized = false
 
     private val _snapshotFlow =
