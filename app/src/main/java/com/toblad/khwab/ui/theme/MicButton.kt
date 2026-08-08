@@ -1,5 +1,6 @@
 package com.toblad.khwab.ui.theme
 
+import androidx.compose.animation.AnimatedContent
 import androidx.compose.animation.core.FastOutSlowInEasing
 import androidx.compose.animation.core.LinearEasing
 import androidx.compose.animation.core.RepeatMode
@@ -7,6 +8,11 @@ import androidx.compose.animation.core.animateFloat
 import androidx.compose.animation.core.infiniteRepeatable
 import androidx.compose.animation.core.rememberInfiniteTransition
 import androidx.compose.animation.core.tween
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.fadeOut
+import androidx.compose.animation.scaleIn
+import androidx.compose.animation.scaleOut
+import androidx.compose.animation.togetherWith
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxSize
@@ -44,7 +50,7 @@ fun MicButton(
     val auraTheme = ThemeController.currentAuraTheme
     val auraActive = ThemeController.currentTheme == ThemeMode.AURA
 
-    val icon = AuraIconProvider.micIconFor(
+    val auraIcon = AuraIconProvider.micIconFor(
         weather = auraTheme.weatherState,
         timePhase = auraTheme.timePhase
     )
@@ -96,7 +102,6 @@ fun MicButton(
     )
 
     // ── Outer ring: opposite phase, half speed, only when LISTENING ───────────
-    // Starts at max alpha and shrinks/fades as inner expands — creates ripple depth
     val outerRingScale by transition.animateFloat(
         initialValue = if (isListening) 1.05f else 1f,
         targetValue  = if (isListening) 1.22f  else 1f,
@@ -118,7 +123,7 @@ fun MicButton(
 
     val buttonSize: Dp = 160.dp
     val ringSize: Dp   = 196.dp
-    val outerRingSize: Dp = 224.dp   // sits 14dp outside the inner ring on each side
+    val outerRingSize: Dp = 224.dp
 
     Box(
         modifier = modifier.size(outerRingSize),
@@ -174,12 +179,22 @@ fun MicButton(
                     ),
                 contentAlignment = Alignment.Center
             ) {
-                Icon(
-                    imageVector = if (auraActive) icon else Icons.Default.Mic,
-                    contentDescription = "Microphone",
-                    tint = colors.onPrimary,
-                    modifier = Modifier.size(72.dp)
-                )
+                // AnimatedContent swaps the icon when Aura mode toggled (scale+fade)
+                AnimatedContent(
+                    targetState = auraActive,
+                    transitionSpec = {
+                        (scaleIn(tween(200)) + fadeIn(tween(200))) togetherWith
+                                (scaleOut(tween(150)) + fadeOut(tween(150)))
+                    },
+                    label = "mic_icon_swap"
+                ) { isAura ->
+                    Icon(
+                        imageVector = if (isAura) auraIcon else Icons.Default.Mic,
+                        contentDescription = "Microphone",
+                        tint = colors.onPrimary,
+                        modifier = Modifier.size(72.dp)
+                    )
+                }
             }
         }
     }

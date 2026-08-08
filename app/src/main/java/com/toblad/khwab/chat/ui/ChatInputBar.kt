@@ -1,5 +1,9 @@
 package com.toblad.khwab.chat.ui
 
+import androidx.compose.animation.animateColorAsState
+import androidx.compose.animation.core.animateFloatAsState
+import androidx.compose.animation.core.spring
+import androidx.compose.animation.core.tween
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -13,7 +17,6 @@ import androidx.compose.foundation.text.KeyboardActions
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.Send
-import androidx.compose.material.icons.filled.Mic
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
@@ -21,13 +24,16 @@ import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.OutlinedTextFieldDefaults
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.getValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.scale
 import androidx.compose.ui.graphics.Brush
+import androidx.compose.ui.hapticfeedback.HapticFeedbackType
+import androidx.compose.ui.platform.LocalHapticFeedback
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.unit.dp
-import com.toblad.khwab.ui.theme.AuraIconProvider
 import com.toblad.khwab.ui.theme.ThemeController
 import com.toblad.khwab.ui.theme.ThemeMode
 
@@ -39,6 +45,7 @@ fun ChatInputBar(
     onMicClick: () -> Unit
 ) {
     val colors = MaterialTheme.colorScheme
+    val haptic = LocalHapticFeedback.current
 
     val auraActive = ThemeController.currentTheme == ThemeMode.AURA
 
@@ -59,6 +66,20 @@ fun ChatInputBar(
 
     val canSend = text.isNotBlank()
 
+    // Animate send button background color: primary when ready, surfaceVariant when empty
+    val sendBgColor by animateColorAsState(
+        targetValue = if (canSend) colors.primary else colors.surfaceVariant,
+        animationSpec = tween(durationMillis = 220),
+        label = "send_bg_color"
+    )
+
+    // Bounce scale in when text becomes available
+    val sendBtnScale by animateFloatAsState(
+        targetValue = if (canSend) 1.0f else 0.88f,
+        animationSpec = spring(dampingRatio = 0.55f, stiffness = 400f),
+        label = "send_btn_scale"
+    )
+
     Row(
         modifier = Modifier
             .fillMaxWidth()
@@ -77,7 +98,12 @@ fun ChatInputBar(
             maxLines = 5,
             shape = RoundedCornerShape(24.dp),
             keyboardOptions = KeyboardOptions(imeAction = ImeAction.Send),
-            keyboardActions = KeyboardActions(onSend = { if (canSend) onSendClick() }),
+            keyboardActions = KeyboardActions(onSend = {
+                if (canSend) {
+                    haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
+                    onSendClick()
+                }
+            }),
             colors = OutlinedTextFieldDefaults.colors(
                 focusedBorderColor   = colors.primary,
                 unfocusedBorderColor = colors.outline,
@@ -90,19 +116,22 @@ fun ChatInputBar(
             textStyle = MaterialTheme.typography.bodyLarge
         )
 
-        // ── Filled circular Send button ───────────────────────────────────────
+        // ── Animated circular Send button ─────────────────────────────────────
         Box(
             modifier = Modifier
                 .size(48.dp)
+                .scale(sendBtnScale)
                 .clip(CircleShape)
-                .background(
-                    if (canSend) colors.primary
-                    else colors.surfaceVariant
-                ),
+                .background(sendBgColor),
             contentAlignment = Alignment.Center
         ) {
             IconButton(
-                onClick = onSendClick,
+                onClick = {
+                    if (canSend) {
+                        haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
+                        onSendClick()
+                    }
+                },
                 enabled = canSend,
                 modifier = Modifier.size(48.dp)
             ) {

@@ -87,6 +87,9 @@ dependencies {
     // Material Icons (Mic, Chat, StopCircle, etc.)
     implementation("androidx.compose.material:material-icons-extended")
 
+    // Google Fonts (Nunito)
+    implementation("androidx.compose.ui:ui-text-google-fonts:1.7.8")
+
     // Navigation
     implementation(libs.androidx.navigation.compose)
 

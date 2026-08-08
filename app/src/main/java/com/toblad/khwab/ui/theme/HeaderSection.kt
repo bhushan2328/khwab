@@ -5,10 +5,15 @@ import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
 import androidx.compose.animation.slideInVertically
 import androidx.compose.animation.togetherWith
+import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
@@ -22,6 +27,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.toblad.khwab.di.UserProfileStore
 import kotlinx.coroutines.delay
@@ -44,7 +50,11 @@ fun HeaderSection() {
     }
 
     // ── Static values: computed once, never need re-updating mid-session ─────
-    val displayName = remember { UserProfileStore.getDisplayName(context) }
+    val rawName = remember { UserProfileStore.getDisplayName(context) }
+    // Fall back to "Friend" so the greeting never feels cold/empty
+    val displayName = remember { rawName.ifBlank { "Friend" } }
+    val avatarInitial = remember { displayName.firstOrNull()?.uppercaseChar()?.toString() ?: "K" }
+
     val initialCalendar = remember { Calendar.getInstance() }
     val greeting = remember {
         when (initialCalendar.get(Calendar.HOUR_OF_DAY)) {
@@ -68,42 +78,68 @@ fun HeaderSection() {
         horizontalArrangement = Arrangement.SpaceBetween,
         verticalAlignment = Alignment.Top
     ) {
-        // ── Left: greeting + name — animated slide-in on first composition ────
-        Column {
-            AnimatedContent(
-                targetState = greeting,
-                transitionSpec = {
-                    (fadeIn() + slideInVertically { -it / 2 }) togetherWith fadeOut()
-                },
-                label = "greeting_anim"
-            ) { greetingText ->
+        // ── Left: avatar badge + greeting + name ─────────────────────────────
+        Row(
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(12.dp)
+        ) {
+            // Circular avatar badge with user initial
+            Box(
+                modifier = Modifier
+                    .size(48.dp)
+                    .background(
+                        color = colors.primaryContainer,
+                        shape = CircleShape
+                    ),
+                contentAlignment = Alignment.Center
+            ) {
                 Text(
-                    text = greetingText,
-                    color = colors.onBackground,
-                    fontSize = 28.sp,
+                    text = avatarInitial,
+                    color = colors.onPrimaryContainer,
+                    fontSize = 20.sp,
                     fontWeight = FontWeight.Bold
                 )
             }
-            Text(
-                text = displayName,
-                color = colors.onSurfaceVariant,
-                fontSize = 18.sp,
-                fontWeight = FontWeight.Medium
-            )
+
+            Column {
+                AnimatedContent(
+                    targetState = greeting,
+                    transitionSpec = {
+                        (fadeIn() + slideInVertically { -it / 2 }) togetherWith fadeOut()
+                    },
+                    label = "greeting_anim"
+                ) { greetingText ->
+                    Text(
+                        text = greetingText,
+                        color = colors.onBackground,
+                        fontSize = 24.sp,
+                        fontWeight = FontWeight.Bold
+                    )
+                }
+                Text(
+                    text = displayName,
+                    color = colors.onSurfaceVariant,
+                    fontSize = 16.sp,
+                    fontWeight = FontWeight.Medium
+                )
+            }
         }
 
         // ── Right: date (static) + live clock (monospace, primary tint) ───────
-        Column(horizontalAlignment = Alignment.End) {
+        Column(
+            horizontalAlignment = Alignment.End,
+            modifier = Modifier.padding(top = 4.dp)
+        ) {
             Text(
                 text = date,
                 color = colors.onSurfaceVariant,
-                fontSize = 15.sp,
+                fontSize = 13.sp,
                 fontWeight = FontWeight.Medium
             )
             Text(
                 text = time,
                 color = colors.primary,
-                fontSize = 20.sp,
+                fontSize = 19.sp,
                 fontWeight = FontWeight.Bold,
                 fontFamily = FontFamily.Monospace
             )

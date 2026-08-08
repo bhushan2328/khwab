@@ -1,5 +1,6 @@
 package com.toblad.khwab.settings
 
+import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -8,11 +9,20 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
+import androidx.compose.material.icons.filled.AccessTime
+import androidx.compose.material.icons.filled.Brush
+import androidx.compose.material.icons.filled.Cloud
+import androidx.compose.material.icons.filled.LocationOn
+import androidx.compose.material.icons.filled.MusicNote
+import androidx.compose.material.icons.filled.Palette
+import androidx.compose.material.icons.filled.PlayCircle
 import androidx.compose.material3.Card
+import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
@@ -32,6 +42,7 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.unit.dp
 import com.toblad.khwab.aura.AuraBridge
 import com.toblad.khwab.aura.model.AuraConfig
@@ -91,6 +102,7 @@ fun SettingsScreen(
             SectionHeader(title = "Appearance")
 
             SettingSwitchRow(
+                icon = Icons.Default.Palette,
                 title = "Aura Enabled",
                 subtitle = "Master switch for the ambient theme",
                 checked = config.enabled,
@@ -101,6 +113,7 @@ fun SettingsScreen(
             )
 
             SettingSwitchRow(
+                icon = Icons.Default.PlayCircle,
                 title = "Animations",
                 subtitle = "Rain, snow, fireflies, leaves and petals",
                 checked = config.animationsEnabled,
@@ -113,6 +126,7 @@ fun SettingsScreen(
             SectionHeader(title = "Data & Location")
 
             SettingSwitchRow(
+                icon = Icons.Default.AccessTime,
                 title = "Follow Real Time",
                 subtitle = "Sky, sun and moon reflect the actual time of day",
                 checked = config.autoTime,
@@ -120,6 +134,7 @@ fun SettingsScreen(
             )
 
             SettingSwitchRow(
+                icon = Icons.Default.Cloud,
                 title = "Follow Real Weather",
                 subtitle = "Theme reflects live weather at your location",
                 checked = config.autoWeather,
@@ -137,6 +152,7 @@ fun SettingsScreen(
             SectionHeader(title = "Audio")
 
             SettingSwitchRow(
+                icon = Icons.Default.MusicNote,
                 title = "Ambient Sound",
                 subtitle = "Rain, wind, crickets and thunder audio",
                 checked = config.ambientSoundEnabled,
@@ -171,12 +187,25 @@ private fun SectionHeader(title: String) {
 
 @Composable
 private fun SettingSwitchRow(
+    icon: ImageVector,
     title: String,
     subtitle: String,
     checked: Boolean,
     onCheckedChange: (Boolean) -> Unit
 ) {
-    Card(modifier = Modifier.fillMaxWidth()) {
+    val colors = MaterialTheme.colorScheme
+    Card(
+        modifier = Modifier.fillMaxWidth(),
+        border = BorderStroke(
+            width = 1.dp,
+            color = if (checked) colors.primary.copy(alpha = 0.35f)
+                    else colors.outline.copy(alpha = 0.25f)
+        ),
+        colors = CardDefaults.cardColors(
+            containerColor = if (checked) colors.primaryContainer.copy(alpha = 0.18f)
+                             else colors.surface
+        )
+    ) {
         Row(
             modifier = Modifier
                 .fillMaxWidth()
@@ -184,22 +213,32 @@ private fun SettingSwitchRow(
             horizontalArrangement = Arrangement.SpaceBetween,
             verticalAlignment = Alignment.CenterVertically
         ) {
+            // Icon chip on the left
+            Icon(
+                imageVector = icon,
+                contentDescription = null,
+                tint = if (checked) colors.primary else colors.onSurfaceVariant,
+                modifier = Modifier
+                    .size(22.dp)
+                    .padding(end = 0.dp)
+            )
+            Spacer(modifier = Modifier.size(12.dp))
             Column(modifier = Modifier.weight(1f)) {
                 Text(text = title, style = MaterialTheme.typography.titleSmall)
                 Text(
                     text = subtitle,
                     style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                    color = colors.onSurfaceVariant
                 )
             }
             Switch(
                 checked = checked,
                 onCheckedChange = onCheckedChange,
                 colors = androidx.compose.material3.SwitchDefaults.colors(
-                    checkedTrackColor   = MaterialTheme.colorScheme.primary,
-                    uncheckedTrackColor = MaterialTheme.colorScheme.outline,
-                    uncheckedBorderColor = MaterialTheme.colorScheme.outline,
-                    uncheckedThumbColor = MaterialTheme.colorScheme.onSurfaceVariant
+                    checkedTrackColor   = colors.primary,
+                    uncheckedTrackColor = colors.outline,
+                    uncheckedBorderColor = colors.outline,
+                    uncheckedThumbColor = colors.onSurfaceVariant
                 )
             )
         }
@@ -215,7 +254,13 @@ private fun RefreshIntervalRow(
 ) {
     val colors = MaterialTheme.colorScheme
 
-    Card(modifier = Modifier.fillMaxWidth()) {
+    Card(
+        modifier = Modifier.fillMaxWidth(),
+        border = BorderStroke(
+            width = 1.dp,
+            color = colors.outline.copy(alpha = 0.25f)
+        )
+    ) {
         Column(
             modifier = Modifier
                 .fillMaxWidth()
@@ -226,6 +271,13 @@ private fun RefreshIntervalRow(
                 horizontalArrangement = Arrangement.SpaceBetween,
                 verticalAlignment = Alignment.CenterVertically
             ) {
+                Icon(
+                    imageVector = Icons.Default.AccessTime,
+                    contentDescription = null,
+                    tint = colors.onSurfaceVariant,
+                    modifier = Modifier.size(22.dp)
+                )
+                Spacer(modifier = Modifier.size(12.dp))
                 Column(modifier = Modifier.weight(1f)) {
                     Text(text = "Weather Refresh", style = MaterialTheme.typography.titleSmall)
                     Text(

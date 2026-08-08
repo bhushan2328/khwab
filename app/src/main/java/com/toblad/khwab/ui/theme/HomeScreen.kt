@@ -1,7 +1,13 @@
 package com.toblad.khwab.ui.theme
 
+import androidx.compose.animation.AnimatedContent
 import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.tween
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.fadeOut
+import androidx.compose.animation.scaleIn
+import androidx.compose.animation.scaleOut
+import androidx.compose.animation.togetherWith
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -33,6 +39,18 @@ import com.toblad.khwab.aura.ui.AuraScene
 import com.toblad.khwab.state.AssistantState
 import com.toblad.khwab.state.AssistantStateManager
 
+// State-specific status messages — contextually meaningful for each assistant state
+private fun statusMessage(state: AssistantState) = when (state) {
+    AssistantState.STOPPED   -> "Tap the mic or press Start to wake Khwab."
+    AssistantState.ERROR     -> "Something went wrong. Tap Start to try again."
+    AssistantState.READY     -> "Say \"Hey Khwab\" or tap the microphone to begin."
+    AssistantState.RUNNING   -> "Listening for wake word…"
+    AssistantState.LISTENING -> "I'm listening — go ahead."
+    AssistantState.THINKING  -> "Processing your request…"
+    AssistantState.EXECUTING -> "Running your command…"
+    AssistantState.SPEAKING  -> "Speaking…"
+}
+
 @Composable
 fun HomeScreen(
     onStartClick: () -> Unit = {},
@@ -47,8 +65,8 @@ fun HomeScreen(
     val auraActive = ThemeController.currentTheme == ThemeMode.AURA
     val icons = AuraIconProvider.homeIcons(
         auraActive = auraActive,
-        weather = auraTheme.weatherState,
-        timePhase = auraTheme.timePhase
+        weather    = auraTheme.weatherState,
+        timePhase  = auraTheme.timePhase
     )
 
     val statusColor = when (assistantState) {
@@ -78,10 +96,7 @@ fun HomeScreen(
             .windowInsetsPadding(WindowInsets.safeDrawing)
     ) {
         if (auraActive) {
-            AuraScene(
-                theme = auraTheme,
-                modifier = Modifier.fillMaxSize()
-            )
+            AuraScene(theme = auraTheme, modifier = Modifier.fillMaxSize())
         }
 
         Column(
@@ -93,7 +108,6 @@ fun HomeScreen(
             horizontalAlignment = Alignment.CenterHorizontally,
             verticalArrangement = Arrangement.Top
         ) {
-
             HeaderSection()
 
             Spacer(modifier = Modifier.height(40.dp))
@@ -102,10 +116,11 @@ fun HomeScreen(
 
             Spacer(modifier = Modifier.height(32.dp))
 
+            // Status message cross-fades when the assistant state changes
             StatusCard(
-                status = assistantState.name,
+                status      = assistantState.name,
                 statusColor = statusColor,
-                message = "Say \"Hey Khwab\" or tap the microphone to begin."
+                message     = statusMessage(assistantState)
             )
 
             Spacer(modifier = Modifier.height(28.dp))
@@ -114,53 +129,65 @@ fun HomeScreen(
                 modifier = Modifier
                     .fillMaxWidth(0.88f)
                     .padding(vertical = 4.dp),
-                color = colors.outline.copy(alpha = 0.5f),
+                color     = colors.outline.copy(alpha = 0.5f),
                 thickness = 1.dp
             )
 
             Spacer(modifier = Modifier.height(20.dp))
 
-            // ── Adaptive Start / Stop ─────────────────────────────────────────
-            if (assistantState == AssistantState.STOPPED || assistantState == AssistantState.ERROR) {
-                ActionButton(
-                    text = "Start Assistant",
-                    icon = icons.start,
-                    backgroundColor = colors.secondary,
-                    modifier = Modifier.fillMaxWidth(0.88f),
-                    onClick = onStartClick
-                )
-            } else {
-                ActionButton(
-                    text = "Stop Assistant",
-                    icon = icons.stop,
-                    backgroundColor = colors.error,
-                    modifier = Modifier.fillMaxWidth(0.88f),
-                    onClick = onStopClick
-                )
+            // ── Adaptive Start / Stop — cross-fades via AnimatedContent ──────
+            val isStopped = assistantState == AssistantState.STOPPED
+                         || assistantState == AssistantState.ERROR
+
+            AnimatedContent(
+                targetState = isStopped,
+                transitionSpec = {
+                    (fadeIn(tween(240)) + scaleIn(tween(240), initialScale = 0.92f)) togetherWith
+                    (fadeOut(tween(180)) + scaleOut(tween(180), targetScale = 0.92f))
+                },
+                label = "start_stop_btn"
+            ) { stopped ->
+                if (stopped) {
+                    ActionButton(
+                        text            = "Start Assistant",
+                        icon            = icons.start,
+                        backgroundColor = colors.secondary,
+                        modifier        = Modifier.fillMaxWidth(0.88f),
+                        onClick         = onStartClick
+                    )
+                } else {
+                    ActionButton(
+                        text            = "Stop Assistant",
+                        icon            = icons.stop,
+                        backgroundColor = colors.error,
+                        modifier        = Modifier.fillMaxWidth(0.88f),
+                        onClick         = onStopClick
+                    )
+                }
             }
 
             Spacer(modifier = Modifier.height(12.dp))
 
-            // ── Secondary actions: Chat + Settings — outlined for visual hierarchy
+            // ── Secondary actions: outlined for visual hierarchy ──────────────
             Row(
                 modifier = Modifier.fillMaxWidth(0.88f),
                 horizontalArrangement = Arrangement.spacedBy(12.dp)
             ) {
                 ActionButton(
-                    text = "Chat",
-                    icon = icons.chat,
+                    text            = "Chat",
+                    icon            = icons.chat,
                     backgroundColor = colors.primary,
-                    outlined = true,
-                    modifier = Modifier.weight(1f),
-                    onClick = onChatClick
+                    outlined        = true,
+                    modifier        = Modifier.weight(1f),
+                    onClick         = onChatClick
                 )
                 ActionButton(
-                    text = "Settings",
-                    icon = icons.settings,
+                    text            = "Settings",
+                    icon            = icons.settings,
                     backgroundColor = colors.tertiary,
-                    outlined = true,
-                    modifier = Modifier.weight(1f),
-                    onClick = onSettingsClick
+                    outlined        = true,
+                    modifier        = Modifier.weight(1f),
+                    onClick         = onSettingsClick
                 )
             }
 
