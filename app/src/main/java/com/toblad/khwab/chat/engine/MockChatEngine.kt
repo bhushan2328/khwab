@@ -1,10 +1,10 @@
 package com.toblad.khwab.chat.engine
 
-import com.toblad.khwab.integration.api.request.IntegrationRequest
 import com.toblad.khwab.integration.api.response.IntegrationResponse
-import com.toblad.khwab.integration.model.error.IntegrationError
 import com.toblad.khwab.integration.model.execution.ExecutionPlan
 import com.toblad.khwab.integration.model.metadata.IntegrationMetadata
+import com.toblad.khwab.integration.model.task.DynamicExecutionResponse
+import com.toblad.khwab.integration.model.task.TaskState
 
 class MockChatEngine : ChatEngine {
 
@@ -23,6 +23,13 @@ class MockChatEngine : ChatEngine {
                 timestamp = System.currentTimeMillis()
             ),
             error = null
+        )
+    }
+
+    override suspend fun replan(state: TaskState): DynamicExecutionResponse {
+        return DynamicExecutionResponse(
+            isComplete = true,
+            statusMessage = "Mock: task complete."
         )
     }
 }

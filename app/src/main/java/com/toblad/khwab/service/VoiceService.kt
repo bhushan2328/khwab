@@ -21,6 +21,8 @@ import com.toblad.khwab.integration.api.request.IntegrationRequest
 import com.toblad.khwab.integration.llm.LLMService
 import com.toblad.khwab.integration.llm.providers.LLMKnowledgeExtractor
 import com.toblad.khwab.integration.llm.providers.RelatedPromptBuilder
+import com.toblad.khwab.integration.model.execution.ExecutionPlan
+import com.toblad.khwab.integration.model.task.TaskState
 import com.toblad.khwab.logging.LogModule
 import com.toblad.khwab.logging.Logger
 import com.toblad.khwab.overlay.FloatingWindow
@@ -319,70 +321,22 @@ class VoiceService : Service() {
             return
         }
 
-        // ── Execute all plan steps in order with closed-loop screen re-read ───
+        // ── Dynamic execution loop: Observe → Reason → Act ───────────────────
         if (response.success) {
-            val plans = response.executionPlans.ifEmpty {
+            val initialPlans = response.executionPlans.ifEmpty {
                 listOfNotNull(response.executionPlan)
             }
 
-            if (plans.isNotEmpty()) {
+            if (initialPlans.isNotEmpty()) {
                 withContext(Dispatchers.Main) {
                     floatingWindow.setState(AssistantState.EXECUTING)
                     AssistantStateManager.updateState(AssistantState.EXECUTING)
                 }
 
-                val accessibilityActions = setOf(
-                    "CLICK", "LONG_CLICK", "SCROLL", "SCROLL_TO_TOP", "SCROLL_TO_BOTTOM",
-                    "SWIPE", "TYPE_TEXT", "GO_BACK", "GO_HOME",
-                    "READ_SCREEN", "FIND_ELEMENT", "FOCUS_ELEMENT"
+                runDynamicExecutionLoop(
+                    originalGoal = text,
+                    initialPlans = initialPlans
                 )
-
-                for (plan in plans) {
-                    Log.d(TAG, "Executing step: ${plan.action}")
-
-                    val isAccessibilityAction = plan.action in accessibilityActions
-                    if (isAccessibilityAction && KhwabAccessibilityService.instance.get() == null) {
-                        speak(
-                            "Please enable Khwab in Settings, then Accessibility, " +
-                            "to use screen actions."
-                        )
-                        withContext(Dispatchers.Main) {
-                            val settingsIntent = Intent(Settings.ACTION_ACCESSIBILITY_SETTINGS).apply {
-                                addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
-                            }
-                            startActivity(settingsIntent)
-                        }
-                        break
-                    }
-
-                    val success = executionEngine.execute(plan)
-                    Log.d(TAG, "Step done: action=${plan.action} success=$success")
-
-                    // Error recovery: speak feedback on failure but do not retry here —
-                    // AccessibilityExecutor already does one retry internally.
-                    if (!success && isAccessibilityAction) {
-                        speak("Couldn't complete that step. Moving on.")
-                    }
-
-                    // Closed-loop: if this step might have changed the screen, wait for
-                    // the new UI to settle then re-capture the accessibility snapshot.
-                    // The fresh snapshot is logged but not re-sent to Core mid-plan
-                    // (Core has already planned all steps); it is available for the
-                    // next user command via AccessibilityTreeMapper.capture().
-                    if (plan.requiresScreenRefresh) {
-                        delay(SCREEN_SETTLE_MS)
-                        val fresh = AccessibilityTreeMapper.capture()
-                        if (fresh != null) {
-                            Logger.info(
-                                LogModule.ACCESSIBILITY,
-                                "Screen refreshed after ${plan.action}: " +
-                                "pkg=${fresh.packageName} elements=${fresh.allElements().size}"
-                            )
-                        }
-                    } else {
-                        delay(STEP_DELAY_MS)
-                    }
-                }
             }
         }
 
@@ -436,6 +390,246 @@ class VoiceService : Service() {
                 Log.e(TAG, "Failed to delete learned knowledge", e)
             }
         }
+    }
+
+    // ── Dynamic execution loop ────────────────────────────────────────────────
+
+    /**
+     * Runs the Observe → Reason → Act loop for multi-step screen-aware execution.
+     *
+     * Strategy:
+     *  1. Execute the first step from the initial plan.
+     *  2. If it requires a screen refresh: wait, capture fresh screen, call replan().
+     *  3. If replan() returns another step: execute it and repeat.
+     *  4. If replan() returns isComplete: speak the completion message, stop.
+     *  5. If replan() returns isFailed: speak the failure, stop.
+     *  6. If replan() returns requiresConfirmation: ask user, stop (user reply
+     *     will retrigger via pendingConfirmationCommand).
+     *  7. Steps that do NOT change the screen proceed directly to the next
+     *     step in the initial plan (no replan needed — screen hasn't changed).
+     */
+    private suspend fun runDynamicExecutionLoop(
+        originalGoal: String,
+        initialPlans: List<ExecutionPlan>
+    ) {
+        val accessibilityActions = setOf(
+            "CLICK", "LONG_CLICK", "SCROLL", "SCROLL_TO_TOP", "SCROLL_TO_BOTTOM",
+            "SWIPE", "TYPE_TEXT", "GO_BACK", "GO_HOME",
+            "READ_SCREEN", "FIND_ELEMENT", "FOCUS_ELEMENT"
+        )
+
+        // Check accessibility availability once before the loop.
+        if (initialPlans.any { it.action in accessibilityActions } &&
+            KhwabAccessibilityService.instance.get() == null) {
+            speak(
+                "Please enable Khwab in Settings, then Accessibility, " +
+                "to use screen actions."
+            )
+            withContext(Dispatchers.Main) {
+                val settingsIntent = Intent(Settings.ACTION_ACCESSIBILITY_SETTINGS).apply {
+                    addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+                }
+                startActivity(settingsIntent)
+            }
+            return
+        }
+
+        // State tracking for the dynamic loop.
+        val completedActions = mutableListOf<String>()
+        var totalStepsExecuted = 0
+        var retryCount = 0
+
+        // Phase 1: execute the initial plan steps sequentially.
+        // For steps that change the screen, we break and switch to dynamic replanning.
+        var switchedToDynamic = false
+
+        for (plan in initialPlans) {
+            Log.d(TAG, "[DynLoop] Initial step: ${plan.action}")
+
+            val success = executionEngine.execute(plan)
+            totalStepsExecuted++
+            Log.d(TAG, "[DynLoop] Step done: action=${plan.action} success=$success")
+
+            val actionDesc = buildActionDesc(plan)
+
+            if (plan.requiresScreenRefresh) {
+                // Screen likely changed. Wait for it to settle, then switch to
+                // dynamic replanning — the rest of the initial plan may be stale.
+                delay(SCREEN_SETTLE_MS)
+                completedActions.add(actionDesc)
+
+                val freshScreen = AccessibilityTreeMapper.capture()
+                if (freshScreen != null) {
+                    Logger.info(
+                        LogModule.ACCESSIBILITY,
+                        "[DynLoop] Fresh screen after ${plan.action}: " +
+                        "pkg=${freshScreen.packageName} elements=${freshScreen.allElements().size}"
+                    )
+                }
+
+                // Build initial task state for the replan loop.
+                var taskState = TaskState(
+                    originalGoal = originalGoal,
+                    completedActions = completedActions.toList(),
+                    lastAction = plan.action,
+                    lastActionSucceeded = success,
+                    currentScreen = freshScreen,
+                    currentPackage = freshScreen?.packageName,
+                    currentWindowTitle = freshScreen?.windowTitle,
+                    retryCount = 0,
+                    totalStepsExecuted = totalStepsExecuted
+                )
+
+                // Phase 2: dynamic replan loop.
+                switchedToDynamic = true
+                while (true) {
+                    if (taskState.isOverLimit()) {
+                        Log.w(TAG, "[DynLoop] Safety cap reached — stopping")
+                        speak("I've taken too many steps. Please try a simpler command.")
+                        break
+                    }
+
+                    Log.d(TAG, "[DynLoop] Replanning. Completed: ${taskState.completedActions}")
+                    val replanResult = try {
+                        integration.replan(taskState)
+                    } catch (e: Exception) {
+                        Log.e(TAG, "[DynLoop] Replan exception", e)
+                        break
+                    }
+
+                    when {
+                        replanResult.isComplete -> {
+                            Log.d(TAG, "[DynLoop] Task complete")
+                            val msg = replanResult.statusMessage
+                            if (!msg.isNullOrBlank()) {
+                                persistKhwabMessage(msg)
+                                withContext(Dispatchers.Main) {
+                                    floatingWindow.setState(AssistantState.SPEAKING)
+                                    AssistantStateManager.updateState(AssistantState.SPEAKING)
+                                }
+                                speak(msg)
+                            }
+                            break
+                        }
+
+                        replanResult.isFailed -> {
+                            Log.w(TAG, "[DynLoop] Task failed: ${replanResult.statusMessage}")
+                            val msg = replanResult.statusMessage ?: "I couldn't complete that task."
+                            persistKhwabMessage(msg)
+                            withContext(Dispatchers.Main) {
+                                floatingWindow.setState(AssistantState.SPEAKING)
+                                AssistantStateManager.updateState(AssistantState.SPEAKING)
+                            }
+                            speak(msg)
+                            break
+                        }
+
+                        replanResult.requiresConfirmation -> {
+                            val prompt = replanResult.confirmationPrompt
+                                ?: "This action may be irreversible. Do you want me to continue?"
+                            // Store the original goal as the pending command so user's
+                            // "yes" re-runs the whole task from the current state.
+                            pendingConfirmationCommand = originalGoal
+                            persistKhwabMessage(prompt)
+                            withContext(Dispatchers.Main) {
+                                floatingWindow.setState(AssistantState.SPEAKING)
+                                AssistantStateManager.updateState(AssistantState.SPEAKING)
+                            }
+                            speak(prompt)
+                            break
+                        }
+
+                        replanResult.nextStep != null -> {
+                            val nextPlan = replanResult.nextStep!!
+                            Log.d(TAG, "[DynLoop] Next step: ${nextPlan.action}")
+
+                            val stepSuccess = executionEngine.execute(nextPlan)
+                            totalStepsExecuted++
+                            Log.d(TAG, "[DynLoop] Next step done: action=${nextPlan.action} success=$stepSuccess")
+
+                            val nextActionDesc = replanResult.actionDescription
+                                ?: buildActionDesc(nextPlan)
+
+                            if (nextPlan.requiresScreenRefresh) {
+                                delay(SCREEN_SETTLE_MS)
+
+                                val nextScreen = AccessibilityTreeMapper.capture()
+                                if (nextScreen != null) {
+                                    Logger.info(
+                                        LogModule.ACCESSIBILITY,
+                                        "[DynLoop] Screen after ${nextPlan.action}: " +
+                                        "pkg=${nextScreen.packageName} " +
+                                        "elements=${nextScreen.allElements().size}"
+                                    )
+                                }
+
+                                // Update retry count: reset on success, increment on failure.
+                                val newRetry = if (stepSuccess) 0 else retryCount + 1
+                                retryCount = newRetry
+
+                                if (stepSuccess) {
+                                    completedActions.add(nextActionDesc)
+                                }
+
+                                taskState = TaskState(
+                                    originalGoal = originalGoal,
+                                    completedActions = completedActions.toList(),
+                                    lastAction = nextPlan.action,
+                                    lastActionSucceeded = stepSuccess,
+                                    currentScreen = nextScreen,
+                                    currentPackage = nextScreen?.packageName,
+                                    currentWindowTitle = nextScreen?.windowTitle,
+                                    retryCount = newRetry,
+                                    totalStepsExecuted = totalStepsExecuted
+                                )
+                                // Continue loop — will replan with new screen.
+
+                            } else {
+                                // Step doesn't change screen — no replan needed yet.
+                                // Add to completed and continue the replan loop with
+                                // same screen (Core will pick the next action).
+                                delay(STEP_DELAY_MS)
+                                if (stepSuccess) completedActions.add(nextActionDesc)
+
+                                taskState = taskState.copy(
+                                    completedActions = completedActions.toList(),
+                                    lastAction = nextPlan.action,
+                                    lastActionSucceeded = stepSuccess,
+                                    retryCount = if (stepSuccess) 0 else retryCount + 1,
+                                    totalStepsExecuted = totalStepsExecuted
+                                )
+                            }
+                        }
+
+                        else -> {
+                            // replanResult has no nextStep and is not complete/failed —
+                            // treat as completion (Core had nothing more to plan).
+                            Log.d(TAG, "[DynLoop] No next step — treating as complete")
+                            break
+                        }
+                    }
+                }
+
+                // After switching to dynamic, skip remaining initial plan steps.
+                break
+            } else {
+                // Step doesn't require screen refresh — execute directly and continue.
+                completedActions.add(actionDesc)
+                delay(STEP_DELAY_MS)
+            }
+        }
+
+        // If we never switched to dynamic (all steps were non-screen-changing),
+        // nothing more to do — initial plan completed.
+        if (!switchedToDynamic) {
+            Log.d(TAG, "[DynLoop] Static plan completed without dynamic replanning")
+        }
+    }
+
+    /** Builds a short human-readable description of an [ExecutionPlan] for logging. */
+    private fun buildActionDesc(plan: ExecutionPlan): String {
+        val name = plan.action.lowercase().replace('_', ' ')
+        return if (!plan.target.isNullOrBlank()) "$name '${plan.target}'" else name
     }
 
     // ── Gemini direct fetch (voice path) ─────────────────────────────────────

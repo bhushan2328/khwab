@@ -3,6 +3,8 @@ package com.toblad.khwab.chat.engine
 import com.toblad.khwab.integration.api.KhwabIntegration
 import com.toblad.khwab.integration.api.request.IntegrationRequest
 import com.toblad.khwab.integration.api.response.IntegrationResponse
+import com.toblad.khwab.integration.model.task.DynamicExecutionResponse
+import com.toblad.khwab.integration.model.task.TaskState
 import com.toblad.khwab.service.AccessibilityTreeMapper
 
 class BrainChatEngine(
@@ -24,5 +26,9 @@ class BrainChatEngine(
                 screenContext = screenSnapshot
             )
         )
+    }
+
+    override suspend fun replan(state: TaskState): DynamicExecutionResponse {
+        return integration.replan(state)
     }
 }

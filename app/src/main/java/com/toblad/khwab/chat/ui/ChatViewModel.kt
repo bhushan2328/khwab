@@ -22,6 +22,9 @@ import com.toblad.khwab.db.repository.RoomPermanentMemory
 import com.toblad.khwab.db.repository.RoomTemporaryKnowledgeRepository
 import com.toblad.khwab.di.KhwabProvider
 import com.toblad.khwab.executor.AndroidExecutionEngine
+import com.toblad.khwab.integration.model.execution.ExecutionPlan
+import com.toblad.khwab.integration.model.task.TaskState
+import com.toblad.khwab.service.AccessibilityTreeMapper
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -242,25 +245,12 @@ class ChatViewModel(
             }
 
             if (response.success) {
-                // ── Execute ALL plan steps in order with closed-loop delays ───
-                val plans = response.executionPlans.ifEmpty {
+                // ── Dynamic execution loop: Observe → Reason → Act ───────────
+                val initialPlans = response.executionPlans.ifEmpty {
                     listOfNotNull(response.executionPlan)
                 }
-                if (plans.isNotEmpty()) {
-                    for (plan in plans) {
-                        try {
-                            executionEngine.execute(plan)
-                        } catch (_: Exception) { }
-
-                        // Mirror VoiceService closed-loop: wait longer after steps
-                        // that trigger a screen transition so the next step doesn't
-                        // fire against a stale UI.
-                        if (plan.requiresScreenRefresh) {
-                            delay(SCREEN_SETTLE_MS)
-                        } else {
-                            delay(STEP_DELAY_MS)
-                        }
-                    }
+                if (initialPlans.isNotEmpty()) {
+                    runDynamicExecutionLoop(originalGoal = input, initialPlans = initialPlans)
                 }
 
                 response.forgetLearnedKey?.let { key ->
@@ -273,6 +263,166 @@ class ChatViewModel(
             }
         }
     }
+
+    // ── Dynamic execution loop ────────────────────────────────────────────────
+
+    /**
+     * Runs the Observe → Reason → Act loop for multi-step screen-aware execution.
+     *
+     * Mirrors [VoiceService.runDynamicExecutionLoop] so Voice and Chat share
+     * the same dynamic behaviour.  The only difference is that Chat appends
+     * status messages as chat bubbles rather than speaking them.
+     */
+    private suspend fun runDynamicExecutionLoop(
+        originalGoal: String,
+        initialPlans: List<ExecutionPlan>
+    ) {
+        val completedActions = mutableListOf<String>()
+        var totalStepsExecuted = 0
+        var retryCount = 0
+        var switchedToDynamic = false
+
+        for (plan in initialPlans) {
+            android.util.Log.d("ChatViewModel", "[DynLoop] Initial step: ${plan.action}")
+
+            val success = try { executionEngine.execute(plan) } catch (_: Exception) { false }
+            totalStepsExecuted++
+
+            val actionDesc = buildActionDesc(plan)
+
+            if (plan.requiresScreenRefresh) {
+                delay(SCREEN_SETTLE_MS)
+                completedActions.add(actionDesc)
+
+                val freshScreen = AccessibilityTreeMapper.capture()
+
+                var taskState = TaskState(
+                    originalGoal = originalGoal,
+                    completedActions = completedActions.toList(),
+                    lastAction = plan.action,
+                    lastActionSucceeded = success,
+                    currentScreen = freshScreen,
+                    currentPackage = freshScreen?.packageName,
+                    currentWindowTitle = freshScreen?.windowTitle,
+                    retryCount = 0,
+                    totalStepsExecuted = totalStepsExecuted
+                )
+
+                switchedToDynamic = true
+                while (true) {
+                    if (taskState.isOverLimit()) {
+                        android.util.Log.w("ChatViewModel", "[DynLoop] Safety cap reached")
+                        break
+                    }
+
+                    android.util.Log.d("ChatViewModel",
+                        "[DynLoop] Replanning. Completed: ${taskState.completedActions}")
+
+                    val replanResult = try {
+                        chatEngine.replan(taskState)
+                    } catch (e: Exception) {
+                        android.util.Log.e("ChatViewModel", "[DynLoop] Replan exception", e)
+                        break
+                    }
+
+                    when {
+                        replanResult.isComplete -> {
+                            android.util.Log.d("ChatViewModel", "[DynLoop] Task complete")
+                            val msg = replanResult.statusMessage
+                            if (!msg.isNullOrBlank()) {
+                                appendKhwabMessage(msg)
+                            }
+                            break
+                        }
+
+                        replanResult.isFailed -> {
+                            val msg = replanResult.statusMessage ?: "I couldn't complete that task."
+                            appendKhwabMessage(msg)
+                            break
+                        }
+
+                        replanResult.requiresConfirmation -> {
+                            val prompt = replanResult.confirmationPrompt
+                                ?: "This action may be irreversible. Do you want me to continue?"
+                            pendingConfirmationInput = originalGoal
+                            appendKhwabMessage(prompt)
+                            break
+                        }
+
+                        replanResult.nextStep != null -> {
+                            val nextPlan = replanResult.nextStep!!
+                            android.util.Log.d("ChatViewModel",
+                                "[DynLoop] Next step: ${nextPlan.action}")
+
+                            val stepSuccess = try {
+                                executionEngine.execute(nextPlan)
+                            } catch (_: Exception) { false }
+                            totalStepsExecuted++
+
+                            val nextActionDesc = replanResult.actionDescription
+                                ?: buildActionDesc(nextPlan)
+
+                            if (nextPlan.requiresScreenRefresh) {
+                                delay(SCREEN_SETTLE_MS)
+
+                                val nextScreen = AccessibilityTreeMapper.capture()
+                                val newRetry = if (stepSuccess) 0 else retryCount + 1
+                                retryCount = newRetry
+
+                                if (stepSuccess) completedActions.add(nextActionDesc)
+
+                                taskState = TaskState(
+                                    originalGoal = originalGoal,
+                                    completedActions = completedActions.toList(),
+                                    lastAction = nextPlan.action,
+                                    lastActionSucceeded = stepSuccess,
+                                    currentScreen = nextScreen,
+                                    currentPackage = nextScreen?.packageName,
+                                    currentWindowTitle = nextScreen?.windowTitle,
+                                    retryCount = newRetry,
+                                    totalStepsExecuted = totalStepsExecuted
+                                )
+
+                            } else {
+                                delay(STEP_DELAY_MS)
+                                if (stepSuccess) completedActions.add(nextActionDesc)
+                                taskState = taskState.copy(
+                                    completedActions = completedActions.toList(),
+                                    lastAction = nextPlan.action,
+                                    lastActionSucceeded = stepSuccess,
+                                    retryCount = if (stepSuccess) 0 else retryCount + 1,
+                                    totalStepsExecuted = totalStepsExecuted
+                                )
+                            }
+                        }
+
+                        else -> {
+                            android.util.Log.d("ChatViewModel",
+                                "[DynLoop] No next step — treating as complete")
+                            break
+                        }
+                    }
+                }
+
+                break
+            } else {
+                completedActions.add(actionDesc)
+                delay(STEP_DELAY_MS)
+            }
+        }
+
+        if (!switchedToDynamic) {
+            android.util.Log.d("ChatViewModel",
+                "[DynLoop] Static plan completed without dynamic replanning")
+        }
+    }
+
+    private fun buildActionDesc(plan: ExecutionPlan): String {
+        val name = plan.action.lowercase().replace('_', ' ')
+        return if (!plan.target.isNullOrBlank()) "$name '${plan.target}'" else name
+    }
+
+    // ─────────────────────────────────────────────────────────────────────────
 
     /** Appends a Khwab reply bubble to both Room and in-memory UI state. */
     private fun appendKhwabMessage(text: String) {
