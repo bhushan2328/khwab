@@ -1,54 +1,56 @@
 package com.toblad.khwab.ui.theme
 
-import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.darkColorScheme
-import androidx.compose.material3.lightColorScheme
 import androidx.compose.runtime.Composable
-import androidx.compose.ui.graphics.Color
 
-private val KhwabDarkColorScheme = darkColorScheme(
+/**
+ * Khwab base theme: pure black background, electric blue primary,
+ * teal-green secondary. No light mode — the app is always dark.
+ *
+ * When Aura is active [ThemeMode.AURA] the color scheme is replaced
+ * entirely by [auraColorScheme] driven by real sky / weather / time.
+ */
+private val KhwabColorScheme = darkColorScheme(
+    // ── Accents ──────────────────────────────────────────────────────────────
     primary             = KhwabBlue,
     primaryContainer    = KhwabBlueContainer,
+    onPrimary           = KhwabWhite,
+    onPrimaryContainer  = KhwabBlueLight,
+
     secondary           = KhwabGreen,
     secondaryContainer  = KhwabGreenContainer,
+    onSecondary         = KhwabBackground,      // black text on vivid green
+    onSecondaryContainer= KhwabGreen,
+
     tertiary            = KhwabViolet,
     tertiaryContainer   = KhwabVioletContainer,
+    onTertiary          = KhwabWhite,
+    onTertiaryContainer = KhwabViolet,
+
+    // ── Danger ───────────────────────────────────────────────────────────────
     error               = KhwabRed,
     errorContainer      = KhwabRedContainer,
-
-    background          = KhwabBackground,
-    surface             = KhwabSurface,
-    surfaceVariant      = KhwabCard,
-    outline             = KhwabBorder,
-
-    onPrimary           = KhwabWhite,
-    onSecondary         = KhwabWhite,
-    onTertiary          = KhwabWhite,
     onError             = KhwabWhite,
-    onBackground        = KhwabTextPrimary,
+    onErrorContainer    = KhwabRed,
+
+    // ── Backgrounds & surfaces ────────────────────────────────────────────────
+    background          = KhwabBackground,      // 0xFF000000 — pure OLED black
+    onBackground        = KhwabTextPrimary,     // light blue-white text
+
+    surface             = KhwabSurface,
     onSurface           = KhwabTextPrimary,
-    onSurfaceVariant    = KhwabTextSecondary
-)
 
-private val KhwabLightColorScheme = lightColorScheme(
-    primary             = KhwabBlueDark,
-    primaryContainer    = Color(0xFFD6E8FF),
-    secondary           = Color(0xFF00875A),
-    tertiary            = Color(0xFF6A3FC7),
-    error               = KhwabRed,
+    surfaceVariant      = KhwabCard,
+    onSurfaceVariant    = KhwabTextSecondary,   // sky-blue secondary text
 
-    background          = KhwabBackgroundLight,
-    surface             = KhwabSurfaceLight,
-    surfaceVariant      = KhwabCardLight,
-    outline             = KhwabBorderLight,
+    outline             = KhwabBorder,
+    outlineVariant      = KhwabBorder,
 
-    onPrimary           = KhwabWhite,
-    onSecondary         = KhwabWhite,
-    onTertiary          = KhwabWhite,
-    onBackground        = Color(0xFF0D1120),
-    onSurface           = Color(0xFF0D1120),
-    onSurfaceVariant    = Color(0xFF3A4460)
+    // ── Inverse (used by Snackbar, tooltips) ─────────────────────────────────
+    inverseSurface      = KhwabTextPrimary,
+    inverseOnSurface    = KhwabBackground,
+    inversePrimary      = KhwabBlue,
 )
 
 @Composable
@@ -57,8 +59,7 @@ fun KhwabTheme(
 ) {
     val colors = when (ThemeController.currentTheme) {
         ThemeMode.AURA    -> ThemeController.currentAuraColors
-        ThemeMode.DEFAULT -> if (isSystemInDarkTheme()) KhwabDarkColorScheme
-                             else KhwabLightColorScheme
+        ThemeMode.DEFAULT -> KhwabColorScheme
     }
 
     MaterialTheme(

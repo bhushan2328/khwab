@@ -3,50 +3,53 @@ package com.toblad.khwab.ui.theme
 import androidx.compose.ui.graphics.Color
 
 // =======================================================
-// KHWAB UI COLOR PALETTE
+// KHWAB UI COLOR PALETTE — Black + Blue + Green
+// =======================================================
+// Base rule: pure black background, electric blue as the
+// primary accent, teal-green as the secondary accent.
+// All other UI draws from these two colours only.
+// When Aura is active, AuraColorScheme overrides everything.
 // =======================================================
 
-// ── Dark scheme backgrounds ─────────────────────────────
-val KhwabBackground     = Color(0xFF06080F)   // True deep-black with blue tint (OLED)
-val KhwabSurface        = Color(0xFF0D1219)   // Clear step up from background
-val KhwabCard           = Color(0xFF141B2D)   // Noticeably lighter — cards stand out
-val KhwabBorder         = Color(0xFF1E2840)   // Warm blue-tinted border
+// ── Backgrounds ─────────────────────────────────────────
+val KhwabBackground     = Color(0xFF000000)   // Pure OLED black
+val KhwabSurface        = Color(0xFF050505)   // Near-black surface
+val KhwabCard           = Color(0xFF0A0F1A)   // Very dark blue-black for cards
+val KhwabBorder         = Color(0xFF0F1E3A)   // Dark blue border
 
-// ── Light scheme backgrounds ────────────────────────────
-val KhwabBackgroundLight    = Color(0xFFF0F4FF)   // Subtle cool-blue tint
-val KhwabSurfaceLight       = Color(0xFFFAFCFF)   // Near-white with hint of blue
-val KhwabCardLight          = Color(0xFFE8EEFF)   // Blue-tinted cards
-val KhwabBorderLight        = Color(0xFFC5CEEA)   // Cooler blue-grey borders
+// ── Primary — Electric Blue ──────────────────────────────
+val KhwabBlue           = Color(0xFF2979FF)   // Vivid electric blue
+val KhwabBlueDark       = Color(0xFF1565C0)   // Deeper blue (unused in dark-only mode)
+val KhwabBlueContainer  = Color(0xFF0A1F4D)   // Dark blue container
+val KhwabBlueLight      = Color(0xFF82B1FF)   // Light blue for secondary text / hints
 
-// ── Primary accent — Khwab Electric Blue ────────────────
-val KhwabBlue           = Color(0xFF4F8EF7)   // Electric indigo-blue — premium & distinctive
-val KhwabBlueDark       = Color(0xFF2D6BE4)   // Deeper for light mode
-val KhwabBlueContainer  = Color(0xFF1A2E5C)   // Rich dark container
+// ── Secondary — Teal Green ───────────────────────────────
+val KhwabGreen          = Color(0xFF00E676)   // Vivid teal-green
+val KhwabGreenContainer = Color(0xFF00291A)   // Dark green container
+val KhwabGreenMuted     = Color(0xFF00BFA5)   // Muted teal for secondary uses
 
-// ── Secondary — Teal-Green ──────────────────────────────
-val KhwabGreen          = Color(0xFF00B882)   // Teal-green: softer, more modern
-val KhwabGreenContainer = Color(0xFF003D2A)   // Deep rich container
+// ── Tertiary — kept for Aura compatibility ───────────────
+val KhwabViolet         = Color(0xFF7C4DFF)   // Violet (Aura only)
+val KhwabVioletContainer= Color(0xFF1A0A40)
 
-// ── Tertiary — Vivid Violet ─────────────────────────────
-val KhwabViolet         = Color(0xFF8B6FE8)   // Brighter, more saturated violet
-val KhwabVioletContainer= Color(0xFF2A1A5E)   // Deep chroma container
+// ── Danger ───────────────────────────────────────────────
+val KhwabRed            = Color(0xFFFF1744)
+val KhwabRedContainer   = Color(0xFF3D0010)
 
-// ── Danger ──────────────────────────────────────────────
-val KhwabRed            = Color(0xFFF44336)
-val KhwabRedContainer   = Color(0xFF4A0D0D)
+// ── Warning ──────────────────────────────────────────────
+val KhwabYellow         = Color(0xFFFFD740)   // Amber-yellow
 
-// ── Warning ─────────────────────────────────────────────
-val KhwabYellow         = Color(0xFFFBBF24)   // Warmer amber-yellow
-
-// ── Text ────────────────────────────────────────────────
+// ── Text ─────────────────────────────────────────────────
 val KhwabWhite          = Color(0xFFFFFFFF)
-val KhwabTextPrimary    = Color(0xFFEDF1FF)   // Brighter, cleaner blue-white
-val KhwabTextSecondary  = Color(0xFF7B88A8)   // More muted — clear hierarchy
-val KhwabGrayDark       = Color(0xFF4A5570)   // Placeholder / hint text
+// Primary text: bright blue-white — everything reads as "blue tinted"
+val KhwabTextPrimary    = Color(0xFFE3F2FD)   // Very light blue-white
+// Secondary text: mid blue-grey
+val KhwabTextSecondary  = Color(0xFF4FC3F7)   // Sky blue for secondary/hint text
+val KhwabGrayDark       = Color(0xFF1A2A4A)   // Placeholder / disabled
 
-// ── Voice state accents ─────────────────────────────────
-val KhwabListening      = Color(0xFF29B6F6)   // Sky-blue (open, receptive)
-val KhwabProcessing     = Color(0xFFA78BFA)   // Soft lavender-purple (thinking)
-val KhwabSpeaking       = Color(0xFF34D399)   // Mint green (output/active)
-val KhwabExecuting      = Color(0xFFFBBF24)   // Amber (action/doing)
-val KhwabOffline        = Color(0xFF374151)   // Dark slate (inactive)
+// ── Voice state accents ──────────────────────────────────
+val KhwabListening      = Color(0xFF00E5FF)   // Cyan — listening
+val KhwabProcessing     = Color(0xFF00E676)   // Green — thinking
+val KhwabSpeaking       = Color(0xFF2979FF)   // Blue — speaking
+val KhwabExecuting      = Color(0xFF00BCD4)   // Teal — executing
+val KhwabOffline        = Color(0xFF1A2A3A)   // Dark slate — inactive
