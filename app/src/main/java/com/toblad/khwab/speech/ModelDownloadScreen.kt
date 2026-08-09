@@ -782,49 +782,81 @@ private fun buildKPaths(w: Float, h: Float, stroke: Float): Triple<Path, Path, P
 }
 
 // ── Draw the bold 3D "K" letter ───────────────────────────────────────────────
+//
+// 3D layers (back → front):
+//   1. Deep shadow  — large offset, near-black, gives the illusion of depth
+//   2. Side faces   — stepped offsets in a darkened hue, fill the "extrusion" body
+//   3. Outer glow   — blurred bloom around the front face
+//   4. Front face   — full brand colour
+//   5. Shine strip  — white highlight on the left/top edge, simulates a light source
 private fun DrawScope.drawKLetter(color: Color, flipCos: Float) {
     val w      = size.width
     val h      = size.height
     val stroke = w * 0.19f
 
-    val depthSign   = if (flipCos >= 0f) 1f else -1f
-    val depthOffset = w * 0.055f * depthSign
-    val depthColor  = Color(
-        red   = (color.red   * 0.45f).coerceIn(0f, 1f),
-        green = (color.green * 0.45f).coerceIn(0f, 1f),
-        blue  = (color.blue  * 0.45f).coerceIn(0f, 1f),
-        alpha = color.alpha * 0.75f
-    )
+    // Depth direction follows the flip so it looks consistent during spin.
+    val depthSign = if (flipCos >= 0f) 1f else -1f
 
-    val (bar, upper, lower) = buildKPaths(w, h, stroke)
-
-    translate(left = depthOffset, top = depthOffset) {
-        drawPath(bar,   color = depthColor, style = Fill)
-        drawPath(upper, color = depthColor, style = Fill)
-        drawPath(lower, color = depthColor, style = Fill)
+    // ── Layer 1: deep cast shadow ─────────────────────────────────────────────
+    // A large offset dark fill that peeks out from behind every face.
+    val shadowOffset = w * 0.11f * depthSign
+    val shadowColor  = Color(0f, 0f, 0f, color.alpha * 0.55f)
+    val (sBar, sUpper, sLower) = buildKPaths(w, h, stroke)
+    translate(left = shadowOffset, top = shadowOffset * 0.7f) {
+        drawPath(sBar,   color = shadowColor, style = Fill)
+        drawPath(sUpper, color = shadowColor, style = Fill)
+        drawPath(sLower, color = shadowColor, style = Fill)
     }
 
+    // ── Layer 2: extruded side faces (4 stepped slices) ───────────────────────
+    // Each slice is a slightly darkened version of the brand colour, stacked
+    // between the shadow and the front face to simulate a thick 3-D body.
+    val steps = 4
+    for (i in steps downTo 1) {
+        val frac        = i / steps.toFloat()
+        val sliceOffset = w * 0.085f * frac * depthSign
+        val brightness  = 0.30f + 0.25f * (1f - frac)   // 0.30 → 0.55 darkest→lighter
+        val sliceColor  = Color(
+            red   = (color.red   * brightness).coerceIn(0f, 1f),
+            green = (color.green * brightness).coerceIn(0f, 1f),
+            blue  = (color.blue  * brightness).coerceIn(0f, 1f),
+            alpha = color.alpha
+        )
+        val (fBar, fUpper, fLower) = buildKPaths(w, h, stroke)
+        translate(left = sliceOffset, top = sliceOffset * 0.7f) {
+            drawPath(fBar,   color = sliceColor, style = Fill)
+            drawPath(fUpper, color = sliceColor, style = Fill)
+            drawPath(fLower, color = sliceColor, style = Fill)
+        }
+    }
+
+    // ── Layer 3: outer glow bloom ─────────────────────────────────────────────
     drawIntoCanvas { canvas ->
         val glowPaint = Paint().apply { isAntiAlias = true }
         glowPaint.asFrameworkPaint().apply {
             maskFilter = android.graphics.BlurMaskFilter(
-                w * 0.13f, android.graphics.BlurMaskFilter.Blur.NORMAL
+                w * 0.18f, android.graphics.BlurMaskFilter.Blur.NORMAL
             )
-            this.color = color.copy(alpha = color.alpha * 0.70f).toArgb()
+            this.color = color.copy(alpha = color.alpha * 0.75f).toArgb()
         }
         canvas.drawRect(w * 0.12f, h * 0.08f, w * 0.12f + stroke, h * 0.92f, glowPaint)
     }
 
+    // ── Layer 4: front face (full brand colour) ───────────────────────────────
+    val (bar, upper, lower) = buildKPaths(w, h, stroke)
     drawPath(bar,   color = color, style = Fill)
     drawPath(upper, color = color, style = Fill)
     drawPath(lower, color = color, style = Fill)
 
-    val shineColor = Color.White.copy(alpha = color.alpha * 0.40f)
+    // ── Layer 5: shine highlight (top-left light source) ─────────────────────
+    val shineColor = Color.White.copy(alpha = color.alpha * 0.55f)
+    // Vertical bar: left-edge shine strip
     drawRect(
         color   = shineColor,
         topLeft = Offset(w * 0.12f, h * 0.08f),
-        size    = Size(stroke * 0.22f, h * 0.44f)
+        size    = Size(stroke * 0.20f, h * 0.84f)
     )
+    // Upper arm: top-edge shine strip
     drawPath(
         path = Path().apply {
             val asx  = w * 0.12f + stroke
@@ -832,8 +864,8 @@ private fun DrawScope.drawKLetter(color: Color, flipCos: Float) {
             val midY = h * 0.50f
             moveTo(asx,  midY - stroke * 0.25f)
             lineTo(tipX, h * 0.08f)
-            lineTo(tipX, h * 0.08f + stroke * 0.22f)
-            lineTo(asx,  midY - stroke * 0.25f + stroke * 0.22f)
+            lineTo(tipX, h * 0.08f + stroke * 0.20f)
+            lineTo(asx,  midY - stroke * 0.25f + stroke * 0.20f)
             close()
         },
         color = shineColor,

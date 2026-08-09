@@ -10,8 +10,8 @@
         android:padding="14dp"
         android:src="@drawable/ic_mic"
         android:background="@drawable/bg_mic_ripple"
-        android:clickable="true"
-        android:focusable="true"
+        android:clickable="false"
+        android:focusable="false"
         android:elevation="8dp"
         android:stateListAnimator="@null"
         android:scaleType="fitCenter" />

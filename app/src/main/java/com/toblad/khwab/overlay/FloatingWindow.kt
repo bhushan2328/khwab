@@ -79,8 +79,8 @@ class FloatingWindow(
             y = (screenHeight * 0.30).toInt()
         }
 
-        attachDragListener()
         windowManager.addView(floatingView, layoutParams)
+        attachDragListener()
     }
 
     fun hide() {
@@ -162,14 +162,20 @@ class FloatingWindow(
     // ── drag + edge-snap + dismiss zone ───────────────────────────────────
     @SuppressLint("ClickableViewAccessibility")
     private fun attachDragListener() {
-        val view = floatingView ?: return
+        // Attach to micButton (the child ImageView), not the FrameLayout wrapper.
+        // The FrameLayout is WRAP_CONTENT so its hit area equals the child; attaching
+        // to the parent would silently drop all events because the child was previously
+        // marked clickable=true and consumed them first. The child is now
+        // clickable=false in XML so every touch reaches this listener directly.
+        val btn  = micButton  ?: return
+        val root = floatingView ?: return
         var initialX = 0
         var initialY = 0
         var initialTouchX = 0f
         var initialTouchY = 0f
         var isDragging = false
 
-        view.setOnTouchListener { v, event ->
+        btn.setOnTouchListener { _, event ->
             val params = layoutParams ?: return@setOnTouchListener false
             when (event.action) {
                 MotionEvent.ACTION_DOWN -> {
@@ -190,7 +196,7 @@ class FloatingWindow(
                     if (isDragging) {
                         params.x = initialX + dx
                         params.y = initialY + dy
-                        windowManager.updateViewLayout(view, params)
+                        windowManager.updateViewLayout(root, params)
 
                         // Highlight dismiss zone when button is dragged near the bottom.
                         val nearBottom = event.rawY > screenHeight() * 0.80f
@@ -205,10 +211,9 @@ class FloatingWindow(
                         if (event.rawY > screenHeight() * 0.82f) {
                             context.stopService(Intent(context, VoiceService::class.java))
                         } else {
-                            snapToEdge(view, params)
+                            snapToEdge(root, params)
                         }
                     } else {
-                        v.performClick()
                         onMicTap?.invoke()
                     }
                     true

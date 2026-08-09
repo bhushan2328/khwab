@@ -25,6 +25,7 @@ import com.toblad.khwab.executor.AndroidExecutionEngine
 import com.toblad.khwab.integration.model.execution.ExecutionPlan
 import com.toblad.khwab.integration.model.task.TaskState
 import com.toblad.khwab.service.AccessibilityTreeMapper
+import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -74,6 +75,14 @@ class ChatViewModel(
 
     /** ID of the placeholder bubble inserted when Gemini acquisition starts. */
     private var pendingPlaceholderMessageId: Long? = null
+
+    /**
+     * Tracks the coroutine running [runDynamicExecutionLoop] so it can be
+     * cancelled when the user leaves ChatActivity (e.g. an app was opened).
+     * Without this, the replan loop keeps executing in the background and
+     * re-issues OPEN_APP every time the user returns.
+     */
+    private var executionJob: Job? = null
 
     /**
      * Last answer shown to the user (Gemini or local memory).
@@ -250,7 +259,16 @@ class ChatViewModel(
                     listOfNotNull(response.executionPlan)
                 }
                 if (initialPlans.isNotEmpty()) {
-                    runDynamicExecutionLoop(originalGoal = input, initialPlans = initialPlans)
+                    // Cancel any prior loop before starting a new one, then
+                    // track the job so cancelExecution() can stop it if the
+                    // user leaves the Activity while the loop is running.
+                    executionJob?.cancel()
+                    executionJob = viewModelScope.launch {
+                        runDynamicExecutionLoop(
+                            originalGoal = input,
+                            initialPlans = initialPlans
+                        )
+                    }
                 }
 
                 response.forgetLearnedKey?.let { key ->
@@ -570,6 +588,19 @@ class ChatViewModel(
             lastAnswerForMemory = null
             lastAnswerQuery = null
         }
+    }
+
+    // ── Execution control ─────────────────────────────────────────────────────
+
+    /**
+     * Cancels any in-flight dynamic execution loop.
+     * Called by [ChatActivity.onStop] so that leaving the Activity while an
+     * OPEN_APP (or any other action) is executing does not cause it to
+     * re-run when the user comes back.
+     */
+    fun cancelExecution() {
+        executionJob?.cancel()
+        executionJob = null
     }
 
     // ── "Remember this" helpers ───────────────────────────────────────────────

@@ -18,6 +18,7 @@ import com.toblad.khwab.di.KhwabProvider
 import com.toblad.khwab.executor.AndroidExecutionEngine
 import com.toblad.khwab.integration.api.KhwabIntegration
 import com.toblad.khwab.integration.api.request.IntegrationRequest
+import com.toblad.khwab.permission.AccessibilityPermissionHelper
 import com.toblad.khwab.integration.llm.LLMService
 import com.toblad.khwab.integration.llm.providers.LLMKnowledgeExtractor
 import com.toblad.khwab.integration.llm.providers.RelatedPromptBuilder
@@ -419,8 +420,12 @@ class VoiceService : Service() {
         )
 
         // Check accessibility availability once before the loop.
+        // Use isEnabledBySystem (system registry check) rather than the raw instance
+        // reference — the instance may still be null in the brief window between the
+        // user granting the permission and onServiceConnected() firing, which would
+        // incorrectly send the user back to Settings even though permission is granted.
         if (initialPlans.any { it.action in accessibilityActions } &&
-            KhwabAccessibilityService.instance.get() == null) {
+            !AccessibilityPermissionHelper.isEnabledBySystem(this)) {
             speak(
                 "Please enable Khwab in Settings, then Accessibility, " +
                 "to use screen actions."
