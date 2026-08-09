@@ -79,7 +79,15 @@ class FloatingWindow(
             y = (screenHeight * 0.30).toInt()
         }
 
-        windowManager.addView(floatingView, layoutParams)
+        try {
+            windowManager.addView(floatingView, layoutParams)
+        } catch (e: Exception) {
+            android.util.Log.e("FloatingWindow", "Failed to add floating view", e)
+            floatingView = null
+            micButton = null
+            layoutParams = null
+            return
+        }
         attachDragListener()
     }
 

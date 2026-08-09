@@ -90,9 +90,6 @@ class VoiceService : Service() {
     override fun onCreate() {
         super.onCreate()
 
-        // Reset stale state from any prior crashed session before anything else runs.
-        AssistantStateManager.updateState(AssistantState.STOPPED)
-
         Log.d(TAG, "VoiceService created")
 
         KhwabProvider.init(applicationContext)
