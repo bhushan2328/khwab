@@ -1,8 +1,11 @@
 package com.toblad.khwab.speech
 
 import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.core.Animatable
 import androidx.compose.animation.core.EaseInBounce
 import androidx.compose.animation.core.EaseInOutCubic
+import androidx.compose.animation.core.EaseOutCubic
+import androidx.compose.animation.core.EaseOutExpo
 import androidx.compose.animation.core.FastOutSlowInEasing
 import androidx.compose.animation.core.LinearEasing
 import androidx.compose.animation.core.RepeatMode
@@ -32,6 +35,9 @@ import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.geometry.CornerRadius
@@ -57,8 +63,9 @@ import com.toblad.khwab.ui.theme.KhwabBlue
 import com.toblad.khwab.ui.theme.KhwabGreen
 import com.toblad.khwab.ui.theme.KhwabViolet
 import com.toblad.khwab.ui.theme.KhwabYellow
+import kotlinx.coroutines.delay
+import kotlinx.coroutines.launch
 import kotlin.math.PI
-import kotlin.math.abs
 import kotlin.math.cos
 import kotlin.math.sin
 
@@ -66,8 +73,14 @@ import kotlin.math.sin
  * Full-screen download screen shown on first launch when the Whisper
  * model files are not yet present on-device.
  *
- * [onReady] is called when the models are available (either already
- * downloaded or just completed) and the app can proceed normally.
+ * When download completes a multi-stage "dream comes to reality" cinematic
+ * plays before [onReady] is called to reveal the home screen.
+ *
+ * Sequence (total ~3 200 ms):
+ *   0 –  700 ms  K launches upward, K grows, glow floods the screen
+ *   700 – 1 400 ms  K reaches apex — radial starburst explodes outward
+ *   1 400 – 2 200 ms  burst fades, screen washes to pure white
+ *   2 200 – 3 200 ms  white dissolves → onReady() called
  */
 @Composable
 fun ModelDownloadScreen(
@@ -76,8 +89,46 @@ fun ModelDownloadScreen(
 ) {
     val state by viewModel.state.collectAsStateWithLifecycle()
 
+    // ── Dream-to-reality transition animatables ───────────────────────────────
+    // dreamActive: true while the cinematic is playing
+    var dreamActive by remember { mutableStateOf(false) }
+
+    // K soars up and grows
+    val dreamKOffsetY  = remember { Animatable(0f) }
+    val dreamKScale    = remember { Animatable(1f) }
+    // Radial starburst radius (0 → full screen diagonal)
+    val dreamBurst     = remember { Animatable(0f) }
+    // Glow bloom alpha that floods the screen
+    val dreamGlowAlpha = remember { Animatable(0f) }
+    // Final white-out overlay (0 → 1)
+    val dreamWhite     = remember { Animatable(0f) }
+    // Content fade out (1 → 0) during whiteout
+    val dreamContentAlpha = remember { Animatable(1f) }
+
     LaunchedEffect(state) {
-        if (state is ModelDownloadState.Ready || state is ModelDownloadState.Completed) {
+        val done = state is ModelDownloadState.Ready || state is ModelDownloadState.Completed
+        if (done && !dreamActive) {
+            dreamActive = true
+
+            // ── Stage 1 (0–700 ms): K launches up, glow floods ───────────────
+            launch { dreamKOffsetY.animateTo(-420f, tween(700, easing = EaseOutExpo)) }
+            launch { dreamKScale.animateTo(3.5f,    tween(700, easing = EaseOutCubic)) }
+            launch { dreamGlowAlpha.animateTo(0.85f, tween(700, easing = FastOutSlowInEasing)) }
+            delay(500)
+
+            // ── Stage 2 (500–1 400 ms): starburst explodes ───────────────────
+            launch { dreamBurst.animateTo(1f, tween(900, easing = EaseOutCubic)) }
+            delay(600)
+
+            // ── Stage 3 (1 100–2 200 ms): content fades, white washes in ─────
+            launch { dreamContentAlpha.animateTo(0f, tween(700, easing = FastOutSlowInEasing)) }
+            launch { dreamWhite.animateTo(1f, tween(900, easing = EaseOutCubic)) }
+            delay(700)
+
+            // ── Stage 4 (1 800–3 200 ms): white dissolves and we hand off ────
+            launch { dreamWhite.animateTo(0f, tween(1000, easing = EaseOutCubic)) }
+            delay(1000)
+
             onReady()
         }
     }
@@ -90,11 +141,9 @@ fun ModelDownloadScreen(
 
     val colors = MaterialTheme.colorScheme
 
-    // ── Single infinite transition driving all logo animations ───────────────
+    // ── Infinite transition — idle bouncing logo ──────────────────────────────
     val anim = rememberInfiniteTransition(label = "logo_anim")
 
-    // ── BOUNCE: parabolic arc — rises high, hangs, drops fast ────────────────
-    // Cycle: rise(480ms) → hang(80ms) → fall+bounce(400ms) → rest(840ms)
     val bounceY by anim.animateFloat(
         initialValue = 0f,
         targetValue  = 0f,
@@ -112,7 +161,6 @@ fun ModelDownloadScreen(
         label = "bounce_y"
     )
 
-    // ── SQUISH / STRETCH scale Y ──────────────────────────────────────────────
     val scaleY by anim.animateFloat(
         initialValue = 1f,
         targetValue  = 1f,
@@ -133,7 +181,6 @@ fun ModelDownloadScreen(
         label = "scale_y"
     )
 
-    // ── SQUISH scale X (inverse of Y for rubbery feel) ───────────────────────
     val scaleX by anim.animateFloat(
         initialValue = 1f,
         targetValue  = 1f,
@@ -154,7 +201,6 @@ fun ModelDownloadScreen(
         label = "scale_x"
     )
 
-    // ── TILT: wobble left and right mid-air ───────────────────────────────────
     val tiltDeg by anim.animateFloat(
         initialValue = 0f,
         targetValue  = 0f,
@@ -174,7 +220,6 @@ fun ModelDownloadScreen(
         label = "tilt"
     )
 
-    // ── FULL SPIN: one complete 360° rotation at the apex ─────────────────────
     val spinDeg by anim.animateFloat(
         initialValue = 0f,
         targetValue  = 0f,
@@ -183,7 +228,7 @@ fun ModelDownloadScreen(
                 durationMillis = 1800
                 0f   at 0
                 0f   at 350  using EaseInOutCubic
-                360f at 750  using EaseInOutCubic   // full spin at apex
+                360f at 750  using EaseInOutCubic
                 360f at 1800
             },
             repeatMode = RepeatMode.Restart
@@ -191,7 +236,6 @@ fun ModelDownloadScreen(
         label = "spin"
     )
 
-    // ── Y-AXIS FLIP: perspective-warp scaleX during apex ─────────────────────
     val flipPhase by anim.animateFloat(
         initialValue = 0f,
         targetValue  = 1f,
@@ -209,7 +253,6 @@ fun ModelDownloadScreen(
     )
     val flipCos = cos(flipPhase * PI.toFloat())
 
-    // ── COLOR CYCLE: brand palette rotation ───────────────────────────────────
     val colorCycle by anim.animateFloat(
         initialValue = 0f,
         targetValue  = 1f,
@@ -220,25 +263,25 @@ fun ModelDownloadScreen(
         label = "color_cycle"
     )
 
-    // ── SHADOW: shrinks when logo is high, expands on landing ────────────────
     val shadowScale by anim.animateFloat(
         initialValue = 1f,
         targetValue  = 1f,
         animationSpec = infiniteRepeatable(
             animation = keyframes {
                 durationMillis = 1800
-                1.0f at 0
-                0.4f at 120
+                1.0f  at 0
+                0.4f  at 120
                 0.15f at 560
                 0.15f at 600
-                0.9f at 960
-                1.0f at 1300
-                1.0f at 1800
+                0.9f  at 960
+                1.0f  at 1300
+                1.0f  at 1800
             },
             repeatMode = RepeatMode.Restart
         ),
         label = "shadow_scale"
     )
+
     val shadowAlpha by anim.animateFloat(
         initialValue = 0.45f,
         targetValue  = 0.45f,
@@ -256,7 +299,6 @@ fun ModelDownloadScreen(
         label = "shadow_alpha"
     )
 
-    // ── PARTICLES: continuous drift ───────────────────────────────────────────
     val particlePhase by anim.animateFloat(
         initialValue = 0f,
         targetValue  = 1f,
@@ -267,7 +309,6 @@ fun ModelDownloadScreen(
         label = "particle_phase"
     )
 
-    // ── LANDING BURST ─────────────────────────────────────────────────────────
     val burstPhase by anim.animateFloat(
         initialValue = 0f,
         targetValue  = 1f,
@@ -284,7 +325,6 @@ fun ModelDownloadScreen(
         label = "burst"
     )
 
-    // ── PULSE RING: expands outward from the K continuously ───────────────────
     val pulsePhase by anim.animateFloat(
         initialValue = 0f,
         targetValue  = 1f,
@@ -295,19 +335,6 @@ fun ModelDownloadScreen(
         label = "pulse"
     )
 
-    // ── TRAIL GHOST: faint echoes of the K left behind mid-air ───────────────
-    // Offset behind the current bounceY position
-    val trailOffset by anim.animateFloat(
-        initialValue = 0f,
-        targetValue  = 1f,
-        animationSpec = infiniteRepeatable(
-            animation = tween(durationMillis = 1800, easing = LinearEasing),
-            repeatMode = RepeatMode.Restart
-        ),
-        label = "trail"
-    )
-
-    // ── SHIMMER sweep on progress bar ─────────────────────────────────────────
     val shimmerOffset by anim.animateFloat(
         initialValue = 0f,
         targetValue  = 1f,
@@ -318,7 +345,6 @@ fun ModelDownloadScreen(
         label = "shimmer"
     )
 
-    // ── BACKGROUND GLOW pulse ─────────────────────────────────────────────────
     val bgGlowAlpha by anim.animateFloat(
         initialValue = 0.20f,
         targetValue  = 0.52f,
@@ -329,39 +355,80 @@ fun ModelDownloadScreen(
         label = "bg_glow"
     )
 
-    val logoColor = lerpBrandColor(colorCycle)
-
-    // Effective 3D perspective-flip scaleX: combine rubber scaleX with flip warp
+    val logoColor   = lerpBrandColor(colorCycle)
     val effectiveScaleX = scaleX * flipCos
+
+    // During dream: K uses dream animatables instead of idle bounce
+    val activeKOffsetY = if (dreamActive) dreamKOffsetY.value else bounceY
+    val activeKScaleX  = if (dreamActive) dreamKScale.value * effectiveScaleX else effectiveScaleX
+    val activeKScaleY  = if (dreamActive) dreamKScale.value * scaleY else scaleY
 
     Surface(
         modifier = Modifier.fillMaxSize(),
-        color = colors.background
+        color    = colors.background
     ) {
         Box(
             modifier = Modifier.fillMaxSize(),
             contentAlignment = Alignment.Center
         ) {
-            // ── Full-screen radial glow layer ─────────────────────────────────
-            Canvas(modifier = Modifier.fillMaxSize()) {
-                val cx     = size.width / 2f
-                val cy     = size.height * 0.28f
-                val radius = size.width * 0.80f
-                drawCircle(
-                    brush = androidx.compose.ui.graphics.Brush.radialGradient(
-                        colors = listOf(
-                            logoColor.copy(alpha = bgGlowAlpha),
-                            logoColor.copy(alpha = bgGlowAlpha * 0.25f),
-                            Color.Transparent
+
+            // ── Idle radial glow layer (fades out as dream activates) ─────────
+            if (!dreamActive) {
+                Canvas(modifier = Modifier.fillMaxSize()) {
+                    val cx     = size.width / 2f
+                    val cy     = size.height * 0.28f
+                    val radius = size.width * 0.80f
+                    drawCircle(
+                        brush = androidx.compose.ui.graphics.Brush.radialGradient(
+                            colors = listOf(
+                                logoColor.copy(alpha = bgGlowAlpha),
+                                logoColor.copy(alpha = bgGlowAlpha * 0.25f),
+                                Color.Transparent
+                            ),
+                            center = Offset(cx, cy),
+                            radius = radius
                         ),
-                        center = Offset(cx, cy),
-                        radius = radius
-                    ),
-                    radius = radius,
-                    center = Offset(cx, cy)
-                )
+                        radius = radius,
+                        center = Offset(cx, cy)
+                    )
+                }
             }
 
+            // ── Dream Stage 1: flooding glow bloom ───────────────────────────
+            if (dreamActive) {
+                Canvas(modifier = Modifier.fillMaxSize()) {
+                    val cx     = size.width / 2f
+                    val cy     = size.height * 0.35f
+                    val radius = size.width * 1.6f
+                    drawCircle(
+                        brush = androidx.compose.ui.graphics.Brush.radialGradient(
+                            colors = listOf(
+                                logoColor.copy(alpha = dreamGlowAlpha.value),
+                                KhwabViolet.copy(alpha = dreamGlowAlpha.value * 0.7f),
+                                KhwabBlue.copy(alpha = dreamGlowAlpha.value * 0.4f),
+                                Color.Transparent
+                            ),
+                            center = Offset(cx, cy),
+                            radius = radius
+                        ),
+                        radius = radius,
+                        center = Offset(cx, cy)
+                    )
+                }
+            }
+
+            // ── Dream Stage 2: starburst expanding rays ───────────────────────
+            if (dreamActive && dreamBurst.value > 0f) {
+                Canvas(modifier = Modifier.fillMaxSize()) {
+                    drawDreamStarburst(
+                        phase      = dreamBurst.value,
+                        color      = logoColor,
+                        glowAlpha  = dreamGlowAlpha.value
+                    )
+                }
+            }
+
+            // ── Main content (fades out during dream stage 3) ─────────────────
             Box(
                 modifier = Modifier
                     .fillMaxSize()
@@ -371,104 +438,109 @@ fun ModelDownloadScreen(
                 Column(
                     horizontalAlignment = Alignment.CenterHorizontally,
                     verticalArrangement = Arrangement.spacedBy(16.dp),
-                    modifier = Modifier.fillMaxWidth()
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        // fade content out during whiteout stage
+                        .then(
+                            if (dreamActive)
+                                Modifier.then(Modifier) // alpha applied per-canvas below
+                            else Modifier
+                        )
                 ) {
-
                     // ── Animated K logo area ─────────────────────────────────
                     Box(
                         contentAlignment = Alignment.BottomCenter,
                         modifier = Modifier.size(width = 180.dp, height = 240.dp)
                     ) {
-                        // Floating particles (behind logo)
-                        Canvas(modifier = Modifier.fillMaxSize()) {
-                            drawFloatingParticles(
-                                particlePhase = particlePhase,
-                                accentColor   = logoColor
-                            )
-                        }
-
-                        // Pulse ring (expands outward from K's resting position)
-                        Canvas(
-                            modifier = Modifier
-                                .size(160.dp)
-                                .align(Alignment.BottomCenter)
-                        ) {
-                            drawPulseRing(phase = pulsePhase, color = logoColor)
-                        }
-
-                        // Landing burst (at ground level)
-                        Canvas(
-                            modifier = Modifier
-                                .size(width = 180.dp, height = 60.dp)
-                                .align(Alignment.BottomCenter)
-                        ) {
-                            drawLandingBurst(phase = burstPhase, color = logoColor)
-                        }
-
-                        // Ground shadow ellipse
-                        Canvas(
-                            modifier = Modifier
-                                .size(width = 120.dp, height = 24.dp)
-                                .align(Alignment.BottomCenter)
-                        ) {
-                            drawOval(
-                                color   = logoColor.copy(alpha = shadowAlpha),
-                                topLeft = Offset(
-                                    x = center.x - (size.width / 2f) * shadowScale,
-                                    y = center.y - (size.height / 2f) * 0.4f
-                                ),
-                                size = Size(
-                                    width  = size.width  * shadowScale,
-                                    height = size.height * 0.4f
+                        if (!dreamActive) {
+                            Canvas(modifier = Modifier.fillMaxSize()) {
+                                drawFloatingParticles(
+                                    particlePhase = particlePhase,
+                                    accentColor   = logoColor
                                 )
-                            )
+                            }
+
+                            Canvas(
+                                modifier = Modifier
+                                    .size(160.dp)
+                                    .align(Alignment.BottomCenter)
+                            ) {
+                                drawPulseRing(phase = pulsePhase, color = logoColor)
+                            }
+
+                            Canvas(
+                                modifier = Modifier
+                                    .size(width = 180.dp, height = 60.dp)
+                                    .align(Alignment.BottomCenter)
+                            ) {
+                                drawLandingBurst(phase = burstPhase, color = logoColor)
+                            }
+
+                            Canvas(
+                                modifier = Modifier
+                                    .size(width = 120.dp, height = 24.dp)
+                                    .align(Alignment.BottomCenter)
+                            ) {
+                                drawOval(
+                                    color   = logoColor.copy(alpha = shadowAlpha),
+                                    topLeft = Offset(
+                                        x = center.x - (size.width / 2f) * shadowScale,
+                                        y = center.y - (size.height / 2f) * 0.4f
+                                    ),
+                                    size = Size(
+                                        width  = size.width  * shadowScale,
+                                        height = size.height * 0.4f
+                                    )
+                                )
+                            }
                         }
 
-                        // Trail ghosts — two faint echoes of the K, offset upward
-                        Canvas(
-                            modifier = Modifier
-                                .size(120.dp)
-                                .align(Alignment.TopCenter)
-                        ) {
-                            // Only draw trails while airborne
-                            val airborne = bounceY < -8f
-                            if (airborne) {
-                                // Ghost 1: 20px above current position, 25% opacity
-                                translate(top = bounceY + 20f) {
-                                    scale(scaleX = effectiveScaleX * 0.9f, scaleY = scaleY * 0.9f) {
-                                        rotate(degrees = tiltDeg + spinDeg) {
-                                            drawKLetter(
-                                                color   = logoColor.copy(alpha = 0.22f),
-                                                flipCos = flipCos
-                                            )
+                        // Trail ghosts while airborne (idle only)
+                        if (!dreamActive) {
+                            Canvas(
+                                modifier = Modifier
+                                    .size(120.dp)
+                                    .align(Alignment.TopCenter)
+                            ) {
+                                val airborne = bounceY < -8f
+                                if (airborne) {
+                                    translate(top = bounceY + 20f) {
+                                        scale(scaleX = effectiveScaleX * 0.9f, scaleY = scaleY * 0.9f) {
+                                            rotate(degrees = tiltDeg + spinDeg) {
+                                                drawKLetter(
+                                                    color   = logoColor.copy(alpha = 0.22f),
+                                                    flipCos = flipCos
+                                                )
+                                            }
                                         }
                                     }
-                                }
-                                // Ghost 2: 42px above, 12% opacity
-                                translate(top = bounceY + 42f) {
-                                    scale(scaleX = effectiveScaleX * 0.78f, scaleY = scaleY * 0.78f) {
-                                        rotate(degrees = tiltDeg + spinDeg) {
-                                            drawKLetter(
-                                                color   = logoColor.copy(alpha = 0.10f),
-                                                flipCos = flipCos
-                                            )
+                                    translate(top = bounceY + 42f) {
+                                        scale(scaleX = effectiveScaleX * 0.78f, scaleY = scaleY * 0.78f) {
+                                            rotate(degrees = tiltDeg + spinDeg) {
+                                                drawKLetter(
+                                                    color   = logoColor.copy(alpha = 0.10f),
+                                                    flipCos = flipCos
+                                                )
+                                            }
                                         }
                                     }
                                 }
                             }
                         }
 
-                        // The main "K" — bouncing + spinning + flipping + tilting
+                        // The K — both idle and dream use the same canvas, different values
                         Canvas(
                             modifier = Modifier
                                 .size(120.dp)
                                 .align(Alignment.TopCenter)
                         ) {
-                            translate(top = bounceY) {
-                                scale(scaleX = effectiveScaleX, scaleY = scaleY) {
+                            translate(top = activeKOffsetY) {
+                                scale(scaleX = activeKScaleX, scaleY = activeKScaleY) {
                                     rotate(degrees = tiltDeg + spinDeg) {
                                         drawKLetter(
-                                            color   = logoColor,
+                                            color   = logoColor.copy(
+                                                alpha = dreamContentAlpha.value
+                                            ),
                                             flipCos = flipCos
                                         )
                                     }
@@ -477,17 +549,20 @@ fun ModelDownloadScreen(
                         }
                     }
 
+                    // Text and progress — fade out during dream
+                    val contentA = dreamContentAlpha.value
+
                     Text(
                         text = "Khwab",
                         style = MaterialTheme.typography.headlineSmall,
                         fontWeight = FontWeight.ExtraBold,
-                        color = colors.onBackground
+                        color = colors.onBackground.copy(alpha = contentA)
                     )
 
                     Text(
                         text = "Your intelligent voice companion",
                         style = MaterialTheme.typography.bodySmall,
-                        color = colors.onSurfaceVariant,
+                        color = colors.onSurfaceVariant.copy(alpha = contentA),
                         textAlign = TextAlign.Center
                     )
 
@@ -497,7 +572,7 @@ fun ModelDownloadScreen(
                         text = "Setting up Khwab",
                         style = MaterialTheme.typography.titleMedium,
                         fontWeight = FontWeight.SemiBold,
-                        color = colors.onBackground
+                        color = colors.onBackground.copy(alpha = contentA)
                     )
 
                     when (val s = state) {
@@ -515,7 +590,7 @@ fun ModelDownloadScreen(
 
                             Text(
                                 text = "Downloading speech recognition model…\nThis happens once and requires Wi-Fi.",
-                                color = colors.onSurfaceVariant,
+                                color = colors.onSurfaceVariant.copy(alpha = contentA),
                                 style = MaterialTheme.typography.bodyMedium,
                                 textAlign = TextAlign.Center
                             )
@@ -526,6 +601,7 @@ fun ModelDownloadScreen(
                                 progress = percent / 100f,
                                 shimmer  = shimmerOffset,
                                 color    = logoColor,
+                                alpha    = contentA,
                                 modifier = Modifier
                                     .fillMaxWidth()
                                     .height(16.dp)
@@ -533,7 +609,7 @@ fun ModelDownloadScreen(
 
                             Text(
                                 text  = "$displayPercent%",
-                                color = logoColor,
+                                color = logoColor.copy(alpha = contentA),
                                 style = MaterialTheme.typography.labelLarge,
                                 fontWeight = FontWeight.Bold,
                                 textAlign = TextAlign.Center
@@ -545,7 +621,7 @@ fun ModelDownloadScreen(
                             ) {
                                 Text(
                                     text  = fileName,
-                                    color = colors.onSurfaceVariant,
+                                    color = colors.onSurfaceVariant.copy(alpha = contentA),
                                     style = MaterialTheme.typography.labelSmall,
                                     textAlign = TextAlign.Center
                                 )
@@ -555,13 +631,13 @@ fun ModelDownloadScreen(
                         is ModelDownloadState.Failed -> {
                             Text(
                                 text = "Download failed",
-                                color = colors.error,
+                                color = colors.error.copy(alpha = contentA),
                                 fontWeight = FontWeight.SemiBold,
                                 style = MaterialTheme.typography.titleSmall
                             )
                             Text(
                                 text  = s.message,
-                                color = colors.onSurfaceVariant,
+                                color = colors.onSurfaceVariant.copy(alpha = contentA),
                                 style = MaterialTheme.typography.bodySmall,
                                 textAlign = TextAlign.Center
                             )
@@ -574,9 +650,10 @@ fun ModelDownloadScreen(
 
                         is ModelDownloadState.Ready,
                         is ModelDownloadState.Completed -> {
+                            // "Ready!" briefly visible before dream sequence begins
                             Text(
-                                text = "Ready!",
-                                color = colors.primary,
+                                text = "Your dream is ready ✨",
+                                color = logoColor.copy(alpha = contentA),
                                 fontWeight = FontWeight.Bold,
                                 style = MaterialTheme.typography.titleMedium
                             )
@@ -584,7 +661,93 @@ fun ModelDownloadScreen(
                     }
                 }
             }
+
+            // ── Dream Stage 3: full-screen white-out veil ────────────────────
+            if (dreamActive && dreamWhite.value > 0f) {
+                Canvas(modifier = Modifier.fillMaxSize()) {
+                    drawRect(
+                        color = Color.White.copy(alpha = dreamWhite.value),
+                        size  = size
+                    )
+                }
+            }
         }
+    }
+}
+
+// ── Dream starburst: 24 long light-rays shooting outward from screen centre ───
+// phase 0→1: rays grow from 0 to full diagonal; alpha fades as they expand
+private fun DrawScope.drawDreamStarburst(
+    phase:     Float,
+    color:     Color,
+    glowAlpha: Float
+) {
+    val cx    = size.width  / 2f
+    val cy    = size.height * 0.38f   // slightly above centre — where K was
+    val diag  = kotlin.math.sqrt((size.width * size.width + size.height * size.height).toDouble()).toFloat()
+    val rays  = 24
+    val alpha = ((1f - phase * 0.7f) * glowAlpha).coerceIn(0f, 1f)
+
+    for (i in 0 until rays) {
+        val angle    = (i * (2f * PI / rays)).toFloat()
+        val rayLen   = diag * phase
+        val baseW    = (14f * (1f - phase * 0.6f)).coerceAtLeast(2f)
+        val perpAngle = angle + PI.toFloat() / 2f
+
+        val tipX   = cx + cos(angle) * rayLen
+        val tipY   = cy + sin(angle) * rayLen
+        val baseX1 = cx + cos(perpAngle) * baseW
+        val baseY1 = cy + sin(perpAngle) * baseW
+        val baseX2 = cx - cos(perpAngle) * baseW
+        val baseY2 = cy - sin(perpAngle) * baseW
+
+        // Alternate between brand colours for a rainbow-dream effect
+        val rayColor = when (i % 4) {
+            0    -> KhwabBlue
+            1    -> KhwabViolet
+            2    -> color
+            else -> KhwabGreen
+        }.copy(alpha = alpha)
+
+        drawPath(
+            path = Path().apply {
+                moveTo(tipX, tipY)
+                lineTo(baseX1, baseY1)
+                lineTo(baseX2, baseY2)
+                close()
+            },
+            color = rayColor,
+            style = Fill
+        )
+    }
+
+    // Central bright core that shrinks as rays expand
+    val coreR = (80f * (1f - phase)).coerceAtLeast(0f)
+    if (coreR > 0f) {
+        drawCircle(
+            brush = androidx.compose.ui.graphics.Brush.radialGradient(
+                colors = listOf(
+                    Color.White.copy(alpha = glowAlpha),
+                    color.copy(alpha = glowAlpha * 0.6f),
+                    Color.Transparent
+                ),
+                center = Offset(cx, cy),
+                radius = coreR
+            ),
+            radius = coreR,
+            center = Offset(cx, cy)
+        )
+    }
+
+    // Concentric ring wave that races outward behind the rays
+    val ringR = diag * 0.55f * phase
+    if (ringR > 0f) {
+        drawCircle(
+            color  = Color.White.copy(alpha = (alpha * 0.55f).coerceIn(0f, 1f)),
+            radius = ringR,
+            center = Offset(cx, cy),
+            style  = Stroke(width = 8f * (1f - phase * 0.8f))
+        )
     }
 }
 
@@ -595,16 +758,12 @@ private fun buildKPaths(w: Float, h: Float, stroke: Float): Triple<Path, Path, P
     val topY      = h * 0.08f
     val botY      = h * 0.92f
     val midY      = h * 0.50f
-    val armStartX = barRight - stroke * 0.05f   // arms overlap the bar slightly
+    val armStartX = barRight - stroke * 0.05f
     val tipX      = w * 0.90f
 
     val bar = Path().apply {
-        addRect(
-            androidx.compose.ui.geometry.Rect(barLeft, topY, barRight, botY)
-        )
+        addRect(androidx.compose.ui.geometry.Rect(barLeft, topY, barRight, botY))
     }
-
-    // Upper diagonal arm: trapezoid from mid-spine to top-right
     val upper = Path().apply {
         moveTo(armStartX, midY - stroke * 0.25f)
         lineTo(armStartX, midY + stroke * 0.75f)
@@ -612,8 +771,6 @@ private fun buildKPaths(w: Float, h: Float, stroke: Float): Triple<Path, Path, P
         lineTo(tipX,      topY)
         close()
     }
-
-    // Lower diagonal arm: trapezoid from mid-spine to bottom-right
     val lower = Path().apply {
         moveTo(armStartX, midY - stroke * 0.75f)
         lineTo(armStartX, midY + stroke * 0.25f)
@@ -621,11 +778,10 @@ private fun buildKPaths(w: Float, h: Float, stroke: Float): Triple<Path, Path, P
         lineTo(tipX,      botY - stroke)
         close()
     }
-
     return Triple(bar, upper, lower)
 }
 
-// ── Draw the bold 3D "K" letter using only DrawScope primitives ───────────────
+// ── Draw the bold 3D "K" letter ───────────────────────────────────────────────
 private fun DrawScope.drawKLetter(color: Color, flipCos: Float) {
     val w      = size.width
     val h      = size.height
@@ -633,8 +789,7 @@ private fun DrawScope.drawKLetter(color: Color, flipCos: Float) {
 
     val depthSign   = if (flipCos >= 0f) 1f else -1f
     val depthOffset = w * 0.055f * depthSign
-
-    val depthColor = Color(
+    val depthColor  = Color(
         red   = (color.red   * 0.45f).coerceIn(0f, 1f),
         green = (color.green * 0.45f).coerceIn(0f, 1f),
         blue  = (color.blue  * 0.45f).coerceIn(0f, 1f),
@@ -643,57 +798,42 @@ private fun DrawScope.drawKLetter(color: Color, flipCos: Float) {
 
     val (bar, upper, lower) = buildKPaths(w, h, stroke)
 
-    // ── Depth / shadow layer ──────────────────────────────────────────────────
     translate(left = depthOffset, top = depthOffset) {
         drawPath(bar,   color = depthColor, style = Fill)
         drawPath(upper, color = depthColor, style = Fill)
         drawPath(lower, color = depthColor, style = Fill)
     }
 
-    // ── Outer glow: draw oversized blurred version via drawIntoCanvas ─────────
     drawIntoCanvas { canvas ->
         val glowPaint = Paint().apply { isAntiAlias = true }
         glowPaint.asFrameworkPaint().apply {
             maskFilter = android.graphics.BlurMaskFilter(
-                w * 0.13f,
-                android.graphics.BlurMaskFilter.Blur.NORMAL
+                w * 0.13f, android.graphics.BlurMaskFilter.Blur.NORMAL
             )
             this.color = color.copy(alpha = color.alpha * 0.70f).toArgb()
         }
-        // Draw bar rect as glow
-        canvas.drawRect(
-            left   = w * 0.12f,
-            top    = h * 0.08f,
-            right  = w * 0.12f + stroke,
-            bottom = h * 0.92f,
-            paint  = glowPaint
-        )
+        canvas.drawRect(w * 0.12f, h * 0.08f, w * 0.12f + stroke, h * 0.92f, glowPaint)
     }
 
-    // ── Main bright K ─────────────────────────────────────────────────────────
     drawPath(bar,   color = color, style = Fill)
     drawPath(upper, color = color, style = Fill)
     drawPath(lower, color = color, style = Fill)
 
-    // ── Top-left shine highlight ───────────────────────────────────────────────
     val shineColor = Color.White.copy(alpha = color.alpha * 0.40f)
-    val (shineBar, shineUpper, _) = buildKPaths(w * 0.22f / stroke + w * 0.12f, h, stroke * 0.22f)
-    // Simpler: just draw a narrow bright strip on the left edge of the bar
     drawRect(
         color   = shineColor,
         topLeft = Offset(w * 0.12f, h * 0.08f),
         size    = Size(stroke * 0.22f, h * 0.44f)
     )
-    // Thin shine on top edge of upper arm
     drawPath(
-        path  = Path().apply {
-            val armStartX = w * 0.12f + stroke
-            val tipX      = w * 0.90f
-            val midY      = h * 0.50f
-            moveTo(armStartX, midY - stroke * 0.25f)
-            lineTo(tipX,      h * 0.08f)
-            lineTo(tipX,      h * 0.08f + stroke * 0.22f)
-            lineTo(armStartX, midY - stroke * 0.25f + stroke * 0.22f)
+        path = Path().apply {
+            val asx  = w * 0.12f + stroke
+            val tipX = w * 0.90f
+            val midY = h * 0.50f
+            moveTo(asx,  midY - stroke * 0.25f)
+            lineTo(tipX, h * 0.08f)
+            lineTo(tipX, h * 0.08f + stroke * 0.22f)
+            lineTo(asx,  midY - stroke * 0.25f + stroke * 0.22f)
             close()
         },
         color = shineColor,
@@ -701,8 +841,7 @@ private fun DrawScope.drawKLetter(color: Color, flipCos: Float) {
     )
 }
 
-// ── Expanding pulse ring centered on the K ────────────────────────────────────
-// phase 0→1: ring expands from r=0 to r=max and fades out
+// ── Expanding dual pulse rings ────────────────────────────────────────────────
 private fun DrawScope.drawPulseRing(phase: Float, color: Color) {
     val cx        = size.width  / 2f
     val cy        = size.height / 2f
@@ -712,12 +851,11 @@ private fun DrawScope.drawPulseRing(phase: Float, color: Color) {
 
     if (radius > 0f) {
         drawCircle(
-            color       = color.copy(alpha = alpha),
-            radius      = radius,
-            center      = Offset(cx, cy),
-            style       = Stroke(width = 3.5f * (1f - phase * 0.6f))
+            color  = color.copy(alpha = alpha),
+            radius = radius,
+            center = Offset(cx, cy),
+            style  = Stroke(width = 3.5f * (1f - phase * 0.6f))
         )
-        // Second inner ring, slightly offset in phase
         val r2     = maxRadius * ((phase + 0.3f) % 1f)
         val alpha2 = (1f - ((phase + 0.3f) % 1f)).coerceIn(0f, 1f) * 0.40f
         drawCircle(
@@ -733,33 +871,18 @@ private fun DrawScope.drawPulseRing(phase: Float, color: Color) {
 private fun DrawScope.drawFloatingParticles(particlePhase: Float, accentColor: Color) {
     val cx = size.width  / 2f
     val cy = size.height / 2f
-
     val particles = listOf(
-        Triple(-62f, 5f, 0),
-        Triple( 58f, 4f, 1),
-        Triple(-38f, 6f, 2),
-        Triple( 44f, 3f, 3),
-        Triple(-70f, 4f, 4),
-        Triple( 22f, 5f, 5),
-        Triple(-22f, 3f, 6),
-        Triple( 68f, 6f, 7),
-        Triple(-48f, 4f, 8),
+        Triple(-62f, 5f, 0), Triple( 58f, 4f, 1), Triple(-38f, 6f, 2),
+        Triple( 44f, 3f, 3), Triple(-70f, 4f, 4), Triple( 22f, 5f, 5),
+        Triple(-22f, 3f, 6), Triple( 68f, 6f, 7), Triple(-48f, 4f, 8),
         Triple( 36f, 5f, 9),
     )
-
     val palette = listOf(
-        KhwabBlue,
-        KhwabViolet,
-        KhwabGreen,
-        KhwabYellow,
-        accentColor,
-        KhwabBlue.copy(alpha   = 0.7f),
-        KhwabViolet.copy(alpha = 0.7f),
-        KhwabGreen.copy(alpha  = 0.7f),
-        accentColor.copy(alpha = 0.6f),
+        KhwabBlue, KhwabViolet, KhwabGreen, KhwabYellow, accentColor,
+        KhwabBlue.copy(alpha = 0.7f), KhwabViolet.copy(alpha = 0.7f),
+        KhwabGreen.copy(alpha = 0.7f), accentColor.copy(alpha = 0.6f),
         KhwabYellow.copy(alpha = 0.7f),
     )
-
     particles.forEachIndexed { i, (xOff, radius, colorIdx) ->
         val phase = (particlePhase + i / 10f) % 1f
         val y     = cy + 20f - phase * (cy + size.height * 0.85f)
@@ -776,57 +899,39 @@ private fun DrawScope.drawFloatingParticles(particlePhase: Float, accentColor: C
     }
 }
 
-// ── Radial landing-burst: 8 short spikes that expand outward on landing ───────
+// ── Radial landing-burst ──────────────────────────────────────────────────────
 private fun DrawScope.drawLandingBurst(phase: Float, color: Color) {
     if (phase <= 0f || phase >= 1f) return
-
-    val cx        = size.width  / 2f
-    val cy        = size.height * 0.25f
-    val maxRadius = size.width  * 0.45f
-    val spikes    = 8
-    val alpha     = (1f - phase).coerceIn(0f, 1f) * 0.85f
-
-    for (i in 0 until spikes) {
-        val angle  = (i * (2f * PI / spikes)).toFloat()
-        val r      = maxRadius * phase
+    val cx    = size.width  / 2f
+    val cy    = size.height * 0.25f
+    val maxR  = size.width  * 0.45f
+    val alpha = (1f - phase).coerceIn(0f, 1f) * 0.85f
+    for (i in 0 until 8) {
+        val angle     = (i * (2f * PI / 8)).toFloat()
+        val r         = maxR * phase
         val perpAngle = angle + PI.toFloat() / 2f
-        val baseW  = 6f * (1f - phase * 0.8f)
-
-        val tipX   = cx + cos(angle) * r
-        val tipY   = cy + sin(angle) * r
-        val baseX1 = cx + cos(perpAngle) * baseW
-        val baseY1 = cy + sin(perpAngle) * baseW
-        val baseX2 = cx - cos(perpAngle) * baseW
-        val baseY2 = cy - sin(perpAngle) * baseW
-
+        val baseW     = 6f * (1f - phase * 0.8f)
         drawPath(
             path = Path().apply {
-                moveTo(tipX, tipY)
-                lineTo(baseX1, baseY1)
-                lineTo(baseX2, baseY2)
+                moveTo(cx + cos(angle) * r,      cy + sin(angle) * r)
+                lineTo(cx + cos(perpAngle) * baseW, cy + sin(perpAngle) * baseW)
+                lineTo(cx - cos(perpAngle) * baseW, cy - sin(perpAngle) * baseW)
                 close()
             },
-            color = color.copy(alpha = alpha),
-            style = Fill
+            color = color.copy(alpha = alpha), style = Fill
         )
     }
-
     val dotR = 8f * (1f - phase)
-    if (dotR > 0f) {
-        drawCircle(
-            color  = color.copy(alpha = alpha),
-            radius = dotR,
-            center = Offset(cx, cy)
-        )
-    }
+    if (dotR > 0f) drawCircle(color = color.copy(alpha = alpha), radius = dotR, center = Offset(cx, cy))
 }
 
-// ── Glowing gradient progress bar with animated shimmer ──────────────────────
+// ── Glowing gradient progress bar ────────────────────────────────────────────
 @Composable
 private fun GlowProgressBar(
     progress: Float,
     shimmer:  Float,
     color:    Color,
+    alpha:    Float = 1f,
     modifier: Modifier = Modifier
 ) {
     val animatedProgress by animateFloatAsState(
@@ -841,7 +946,7 @@ private fun GlowProgressBar(
         val r = h / 2f
 
         drawRoundRect(
-            color        = Color(0xFF1A2540),
+            color        = Color(0xFF1A2540).copy(alpha = alpha),
             size         = size,
             cornerRadius = CornerRadius(r)
         )
@@ -853,19 +958,21 @@ private fun GlowProgressBar(
                 val glowPaint = Paint().apply { isAntiAlias = true }
                 glowPaint.asFrameworkPaint().apply {
                     maskFilter = android.graphics.BlurMaskFilter(
-                        h * 3f,
-                        android.graphics.BlurMaskFilter.Blur.NORMAL
+                        h * 3f, android.graphics.BlurMaskFilter.Blur.NORMAL
                     )
-                    setColor(color.copy(alpha = 0.55f).toArgb())
+                    setColor(color.copy(alpha = 0.55f * alpha).toArgb())
                 }
                 canvas.drawRoundRect(0f, 0f, fillW, h, r, r, glowPaint)
             }
 
             drawRoundRect(
                 brush = androidx.compose.ui.graphics.Brush.horizontalGradient(
-                    colors = listOf(KhwabBlue, color, KhwabViolet),
-                    startX = 0f,
-                    endX   = fillW
+                    colors = listOf(
+                        KhwabBlue.copy(alpha = alpha),
+                        color.copy(alpha = alpha),
+                        KhwabViolet.copy(alpha = alpha)
+                    ),
+                    startX = 0f, endX = fillW
                 ),
                 size         = Size(fillW, h),
                 cornerRadius = CornerRadius(r)
@@ -877,11 +984,10 @@ private fun GlowProgressBar(
                 brush = androidx.compose.ui.graphics.Brush.horizontalGradient(
                     colors = listOf(
                         Color.Transparent,
-                        Color.White.copy(alpha = 0.50f),
+                        Color.White.copy(alpha = 0.50f * alpha),
                         Color.Transparent
                     ),
-                    startX = stripeX,
-                    endX   = stripeX + stripeW
+                    startX = stripeX, endX = stripeX + stripeW
                 ),
                 size         = Size(fillW, h),
                 cornerRadius = CornerRadius(r)
@@ -890,11 +996,10 @@ private fun GlowProgressBar(
             drawRoundRect(
                 brush = androidx.compose.ui.graphics.Brush.horizontalGradient(
                     colors = listOf(
-                        Color.White.copy(alpha = 0.28f),
-                        Color.White.copy(alpha = 0.08f)
+                        Color.White.copy(alpha = 0.28f * alpha),
+                        Color.White.copy(alpha = 0.08f * alpha)
                     ),
-                    startX = 0f,
-                    endX   = fillW
+                    startX = 0f, endX = fillW
                 ),
                 topLeft      = Offset(0f, 0f),
                 size         = Size(fillW, h * 0.42f),
@@ -904,7 +1009,7 @@ private fun GlowProgressBar(
     }
 }
 
-// ── Smoothly cycle through KhwabBlue → KhwabViolet → KhwabGreen → KhwabYellow
+// ── Brand colour lerp ─────────────────────────────────────────────────────────
 private fun lerpBrandColor(t: Float): Color {
     val colors = listOf(KhwabBlue, KhwabViolet, KhwabGreen, KhwabYellow, KhwabBlue)
     val scaled = t * (colors.size - 1)
