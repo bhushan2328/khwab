@@ -4,7 +4,7 @@
     <color name="white">#FFFFFFFF</color>
 
     <!-- App background reference used by themes.xml — updated to new palette -->
-    <color name="khwab_background">#FF06080F</color>
+    <color name="khwab_background">#FF000000</color>
 
     <!-- Overlay mic state colours — synced with updated KhwabColor palette -->
     <color name="mic_idle">#CC4F8EF7</color>       <!-- KhwabBlue -->
