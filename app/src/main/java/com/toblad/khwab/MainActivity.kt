@@ -59,18 +59,16 @@ class MainActivity : ComponentActivity() {
             // If still not granted, leave the user on the home screen to try again.
         }
 
-        // If the user returned from Accessibility Settings, re-check and dismiss
-        // the onboarding dialog if they have now enabled the service.
-        if (pendingAccessibilityPermission) {
-            pendingAccessibilityPermission = false
-            if (AccessibilityPermissionHelper.isEnabledBySystem(this)) {
-                showAccessibilityDialog = false
-                // Service is already running (started before the dialog was shown).
-                // Now that accessibility is granted, send the app to the background
-                // so the floating mic overlay is visible over other apps.
-                if (AssistantStateManager.stateFlow.value != AssistantState.STOPPED) {
-                    moveTaskToBack(true)
-                }
+        // Always re-check accessibility on every resume while the dialog is visible
+        // (or after we sent the user to Settings). This covers:
+        //   • user tapped "Open Settings" in the dialog
+        //   • user navigated to accessibility settings by any other means
+        //   • brief race between onServiceConnected and onResume
+        if (pendingAccessibilityPermission) pendingAccessibilityPermission = false
+        if (showAccessibilityDialog && AccessibilityPermissionHelper.isEnabledBySystem(this)) {
+            showAccessibilityDialog = false
+            if (AssistantStateManager.stateFlow.value != AssistantState.STOPPED) {
+                moveTaskToBack(true)
             }
         }
     }
