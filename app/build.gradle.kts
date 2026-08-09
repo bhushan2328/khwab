@@ -35,10 +35,10 @@ android {
         buildConfigField("String", "OPENROUTER_API_KEY",
             "\"${localProps.getProperty("OPENROUTER_API_KEY", "")}\"")
 
-        // Only package the arm64-v8a native libs — covers all real Android phones
-        // made after 2017. Drops x86/x86_64/armeabi-v7a duplicates (~75 MB).
+        // Package both arm64-v8a (64-bit) and armeabi-v7a (32-bit) native libs
+        // to support all ARMv7+ and ARMv8 devices from API 24 onward.
         ndk {
-            abiFilters += listOf("arm64-v8a")
+            abiFilters += listOf("arm64-v8a", "armeabi-v7a")
         }
     }
 
