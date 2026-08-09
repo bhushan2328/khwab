@@ -65,6 +65,12 @@ class MainActivity : ComponentActivity() {
             pendingAccessibilityPermission = false
             if (AccessibilityPermissionHelper.isEnabledBySystem(this)) {
                 showAccessibilityDialog = false
+                // Service is already running (started before the dialog was shown).
+                // Now that accessibility is granted, send the app to the background
+                // so the floating mic overlay is visible over other apps.
+                if (AssistantStateManager.stateFlow.value != AssistantState.STOPPED) {
+                    moveTaskToBack(true)
+                }
             }
         }
     }
@@ -258,6 +264,11 @@ class MainActivity : ComponentActivity() {
         if (!AccessibilityPermissionHelper.isEnabledBySystem(this)) {
             Logger.info(LogModule.ACCESSIBILITY, "Accessibility service not enabled — showing onboarding dialog")
             showAccessibilityDialog = true
+        } else {
+            // Accessibility is already enabled — send the app to the background
+            // immediately so the floating mic overlay appears over other apps
+            // and the user can start using voice commands right away.
+            moveTaskToBack(true)
         }
     }
 
