@@ -1,0 +1,19 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+    Debug-variant manifest additions.
+
+    This file is merged into the APK manifest only for debug builds.
+    AuraDebugActivity is therefore absent from release builds entirely.
+-->
+<manifest xmlns:android="http://schemas.android.com/apk/res/android">
+
+    <application>
+
+        <activity
+            android:name=".debug.AuraDebugActivity"
+            android:exported="false"
+            android:theme="@style/Theme.Khwab" />
+
+    </application>
+
+</manifest>

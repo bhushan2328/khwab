@@ -1,5 +1,6 @@
 package com.toblad.khwab.ui.theme
 
+import com.toblad.khwab.BuildConfig
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 
@@ -28,6 +29,8 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.OutlinedButton
+import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
@@ -62,7 +65,8 @@ fun HomeScreen(
     onStartClick: () -> Unit = {},
     onStopClick: () -> Unit = {},
     onChatClick: () -> Unit = {},
-    onSettingsClick: () -> Unit = {}
+    onSettingsClick: () -> Unit = {},
+    onAuraDebugClick: () -> Unit = {}
 ) {
     val colors = MaterialTheme.colorScheme
     val assistantState by AssistantStateManager.stateFlow.collectAsState()
@@ -229,6 +233,25 @@ fun HomeScreen(
             }
 
             Spacer(modifier = Modifier.height(32.dp))
+
+            // ── Aura Debug Console — debug builds only ────────────────────────
+            if (BuildConfig.DEBUG) {
+                OutlinedButton(
+                    onClick = onAuraDebugClick,
+                    shape = androidx.compose.foundation.shape.RoundedCornerShape(8.dp),
+                    border = androidx.compose.foundation.BorderStroke(
+                        1.dp, colors.outline.copy(alpha = 0.5f)
+                    ),
+                    modifier = Modifier.fillMaxWidth(0.88f)
+                ) {
+                    Text(
+                        text = "🐛 Aura Debug",
+                        style = MaterialTheme.typography.labelMedium,
+                        color = colors.onSurface.copy(alpha = 0.6f)
+                    )
+                }
+                Spacer(modifier = Modifier.height(16.dp))
+            }
         }
     }
 }

@@ -1,5 +1,6 @@
 package com.toblad.khwab
 
+import com.toblad.khwab.BuildConfig
 import android.Manifest
 import android.app.ActivityOptions
 import android.content.Intent
@@ -209,6 +210,22 @@ class MainActivity : ComponentActivity() {
                                 android.R.anim.fade_out
                             ).toBundle()
                             startActivity(Intent(this@MainActivity, SettingsActivity::class.java), opts)
+                        },
+                        onAuraDebugClick = {
+                            if (BuildConfig.DEBUG) {
+                                val opts = ActivityOptions.makeCustomAnimation(
+                                    this@MainActivity,
+                                    android.R.anim.fade_in,
+                                    android.R.anim.fade_out
+                                ).toBundle()
+                                startActivity(
+                                    Intent().setClassName(
+                                        packageName,
+                                        "$packageName.debug.AuraDebugActivity"
+                                    ),
+                                    opts
+                                )
+                            }
                         }
                     )
                 }
