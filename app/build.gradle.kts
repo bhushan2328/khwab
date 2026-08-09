@@ -35,11 +35,10 @@ android {
         buildConfigField("String", "OPENROUTER_API_KEY",
             "\"${localProps.getProperty("OPENROUTER_API_KEY", "")}\"")
 
-        // Package both arm64-v8a (64-bit) and armeabi-v7a (32-bit) native libs
-        // to support all ARMv7+ and ARMv8 devices from API 24 onward.
-        ndk {
-            abiFilters += listOf("arm64-v8a", "armeabi-v7a")
-        }
+        // No native ABI filter needed — Sherpa-ONNX .so files are downloaded
+        // at runtime from GitHub Releases and loaded via System.load().
+        // Keeping the block empty means the APK contains no bundled native libs
+        // from the sherpa AAR, which was the primary source of the 57 MB overhead.
     }
 
     buildTypes {
@@ -107,7 +106,11 @@ dependencies {
     implementation(libs.androidx.lifecycle.runtime.ktx)
     implementation(libs.androidx.lifecycle.runtime.compose)
 
-    implementation(files("libs/sherpa-onnx-1.13.3.aar"))
+    // Sherpa-ONNX Java API stub (classes.jar only, 229 KB).
+    // The native .so files are NOT bundled in the APK — they are downloaded
+    // at first launch from GitHub Releases by ModelDownloadManager and loaded
+    // via System.load() in SpeechManager before the engine initialises.
+    implementation(files("libs/sherpa-onnx-stub.jar"))
 
     testImplementation(libs.junit)
 

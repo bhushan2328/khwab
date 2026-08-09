@@ -588,8 +588,12 @@ fun ModelDownloadScreen(
                                 label = "pct_counter"
                             )
 
+                            val phaseLabel = when {
+                                percent < 30 -> "Downloading speech engine…"
+                                else         -> "Downloading speech recognition model…"
+                            }
                             Text(
-                                text = "Downloading speech recognition model…\nThis happens once and requires Wi-Fi.",
+                                text = "$phaseLabel\nThis happens once and requires Wi-Fi.",
                                 color = colors.onSurfaceVariant.copy(alpha = contentA),
                                 style = MaterialTheme.typography.bodyMedium,
                                 textAlign = TextAlign.Center

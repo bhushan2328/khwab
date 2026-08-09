@@ -18,8 +18,8 @@ class ModelDownloadViewModel(
     val state: StateFlow<ModelDownloadState> = _state.asStateFlow()
 
     init {
-        // If models are already on disk, go straight to Ready
-        if (ModelDownloadManager.modelsReady(context)) {
+        // If both native libs and model files are already on disk, skip straight to Ready
+        if (ModelDownloadManager.allReady(context)) {
             _state.value = ModelDownloadState.Ready
         }
     }
