@@ -6,6 +6,7 @@ import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
 
 /**
@@ -29,13 +30,18 @@ class AuraSyncScheduler(
         if (job?.isActive == true) return
 
         job = scope.launch {
-            while (true) {
+            while (isActive) {
                 val minutes = AuraBridge.getConfig()
                     .refreshIntervalMinutes
                     .coerceAtLeast(1)
 
                 delay(minutes * 60_000L)
-                environmentSync.sync()
+                try {
+                    environmentSync.sync()
+                } catch (_: Exception) {
+                    // sync() failed (network/location error) — continue the loop;
+                    // the next scheduled tick will retry.
+                }
             }
         }
     }

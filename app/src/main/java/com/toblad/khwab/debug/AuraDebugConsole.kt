@@ -197,6 +197,9 @@ fun AuraDebugConsole(
                     appendLine("Animations: ${if (theme.animationsEnabled) "ON" else "OFF"}")
                     appendLine("Time phase: ${theme.timePhase}")
                     appendLine("Enabled:    ${theme.enabled}")
+                    appendLine("SolarElev:  ${"%.3f".format(theme.solarElevNorm)}")
+                    appendLine("MoonIllum:  ${"%.3f".format(theme.moonIlluminationFraction)}")
+                    appendLine("GPS:        ${if (theme.isSolarAccurate) "accurate" else "fallback"}")
                 },
                 style = MaterialTheme.typography.bodyMedium.copy(
                     fontFamily = androidx.compose.ui.text.font.FontFamily.Monospace
