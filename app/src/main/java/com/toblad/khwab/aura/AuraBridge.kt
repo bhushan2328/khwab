@@ -16,6 +16,7 @@ import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.drop
 import kotlinx.coroutines.launch
 
 /**
@@ -98,6 +99,22 @@ object AuraBridge {
         }
 
         pushTheme()
+
+        // Forward AuraManager's periodic background refreshes (every 60 s) to the
+        // UI layer. Without this collector, AuraManager.refreshScope updates
+        // _themeFlow but ThemeController.currentAuraTheme never advances past the
+        // theme generated at activate/initialize time, so solarElevNorm,
+        // timePhase, and moon/star visibility all go stale — making moon and stars
+        // invisible when the app is opened during the day and checked at night.
+        // drop(1): the initial value is already pushed above via pushTheme().
+        scope.launch(Dispatchers.Main) {
+            aura.themeFlow
+                .drop(1)
+                .collect { theme ->
+                    ThemeController.updateAuraTheme(theme)
+                    _snapshotFlow.value = AuraSnapshot(theme, aura.getConfig())
+                }
+        }
     }
 
     fun activate() {
