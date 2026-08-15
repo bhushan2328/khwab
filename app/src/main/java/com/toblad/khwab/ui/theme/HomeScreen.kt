@@ -22,11 +22,11 @@ import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.navigationBars
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.safeDrawing
 import androidx.compose.foundation.layout.windowInsetsPadding
-import androidx.compose.foundation.rememberScrollState
-import androidx.compose.foundation.verticalScroll
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
@@ -42,7 +42,9 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
 import com.toblad.khwab.aura.model.TimePhase
 import com.toblad.khwab.state.AssistantState
 import com.toblad.khwab.state.AssistantStateManager
@@ -94,7 +96,7 @@ fun HomeScreen(
     LaunchedEffect(Unit) { visible = true }
     val contentAlpha by animateFloatAsState(
         targetValue = if (visible) 1f else 0f,
-        animationSpec = tween(durationMillis = 500),
+        animationSpec = tween(durationMillis = 600),
         label = "home_fade_in"
     )
 
@@ -118,142 +120,214 @@ fun HomeScreen(
         }
     }
 
+    // Daytime Aura: light surfaces are visible on bright sky — use dark text/borders
+    val isDaytime = auraActive && auraTheme.timePhase in listOf(
+        TimePhase.SUNRISE, TimePhase.MORNING, TimePhase.NOON, TimePhase.AFTERNOON
+    )
+
+    // Bottom panel: translucent surface floating above the Unity world
+    val bottomSurfaceColor = when {
+        isDaytime  -> Color.White.copy(alpha = 0.18f)
+        auraActive -> Color(0xFF0A0C18).copy(alpha = 0.72f)
+        else       -> Color(0xFF080A14).copy(alpha = 0.82f)
+    }
+    val bottomBorderColor = when {
+        isDaytime  -> Color.White.copy(alpha = 0.30f)
+        auraActive -> colors.outline.copy(alpha = 0.30f)
+        else       -> colors.outline.copy(alpha = 0.40f)
+    }
+
+    val isStopped = assistantState == AssistantState.STOPPED
+                 || assistantState == AssistantState.ERROR
+
     Box(
         modifier = Modifier
             .fillMaxSize()
             .then(fallbackBg)
-            .windowInsetsPadding(WindowInsets.safeDrawing)
     ) {
-        // 2D AuraScene is suppressed when Unity Aura is active — Unity renders the
-        // environment behind this Compose layer. When Aura is inactive the 2D scene
-        // continues to work exactly as before.
-        if (auraActive) {
-            // Unity surface is visible through the transparent background above.
-            // AuraScene is intentionally not rendered here to avoid covering Unity.
-        }
+        // ── Aura note: Unity surface is visible through the transparent background above.
+        // AuraScene is intentionally not rendered here to avoid covering Unity.
 
         Column(
             modifier = Modifier
                 .fillMaxSize()
-                .verticalScroll(rememberScrollState())
-                .padding(horizontal = 20.dp, vertical = 16.dp)
+                .windowInsetsPadding(WindowInsets.safeDrawing)
                 .alpha(contentAlpha),
-            horizontalAlignment = Alignment.CenterHorizontally,
-            verticalArrangement = Arrangement.Top
+            horizontalAlignment = Alignment.CenterHorizontally
         ) {
-            HeaderSection()
 
-            Spacer(modifier = Modifier.height(40.dp))
+            // ── TOP: App identity + Header ────────────────────────────────────
+            Spacer(modifier = Modifier.height(8.dp))
 
-            MicButton(onClick = onStartClick)
-
-            Spacer(modifier = Modifier.height(32.dp))
-
-            // Status message cross-fades when the assistant state changes
-            StatusCard(
-                status      = assistantState.name,
-                statusColor = statusColor,
-                message     = statusMessage(assistantState)
+            // Compact app identity label
+            Text(
+                text = "KHWAB",
+                style = MaterialTheme.typography.labelSmall,
+                color = if (isDaytime) Color.White.copy(alpha = 0.70f)
+                        else colors.primary.copy(alpha = 0.60f),
+                fontWeight = FontWeight.Bold,
+                letterSpacing = 4.sp
             )
 
-            Spacer(modifier = Modifier.height(28.dp))
+            Spacer(modifier = Modifier.height(10.dp))
 
-            // Use white divider over bright daytime Aura sky so it stays visible
-            val isDaytimeDivider = auraActive && auraTheme.timePhase in listOf(
-                com.toblad.khwab.aura.model.TimePhase.SUNRISE,
-                com.toblad.khwab.aura.model.TimePhase.MORNING,
-                com.toblad.khwab.aura.model.TimePhase.NOON,
-                com.toblad.khwab.aura.model.TimePhase.AFTERNOON
-            )
-            HorizontalDivider(
+            // Header section (avatar, greeting, clock)
+            Box(modifier = Modifier.padding(horizontal = 24.dp)) {
+                HeaderSection()
+            }
+
+            // ── MIDDLE: Aura world + Mic — let environment breathe ────────────
+            // Weight(1f) ensures mic area expands to fill available space
+            Box(
                 modifier = Modifier
-                    .fillMaxWidth(0.88f)
-                    .padding(vertical = 4.dp),
-                color = when {
-                    isDaytimeDivider -> Color.White.copy(alpha = 0.60f)
-                    auraActive       -> colors.outline.copy(alpha = 0.75f) // fix #10: more visible at night
-                    else             -> colors.outline.copy(alpha = 0.50f)
-                },
-                thickness = 1.dp
-            )
-
-            Spacer(modifier = Modifier.height(20.dp))
-
-            // ── Adaptive Start / Stop — cross-fades via AnimatedContent ──────
-            val isStopped = assistantState == AssistantState.STOPPED
-                         || assistantState == AssistantState.ERROR
-
-            AnimatedContent(
-                targetState = isStopped,
-                transitionSpec = {
-                    (fadeIn(tween(240)) + scaleIn(tween(240), initialScale = 0.92f)) togetherWith
-                    (fadeOut(tween(180)) + scaleOut(tween(180), targetScale = 0.92f))
-                },
-                label = "start_stop_btn"
-            ) { stopped ->
-                if (stopped) {
-                    ActionButton(
-                        text            = "Start Assistant",
-                        icon            = icons.start,
-                        backgroundColor = colors.secondary,
-                        modifier        = Modifier.fillMaxWidth(0.88f),
-                        onClick         = onStartClick
-                    )
-                } else {
-                    ActionButton(
-                        text            = "Stop Assistant",
-                        icon            = icons.stop,
-                        backgroundColor = colors.error,
-                        modifier        = Modifier.fillMaxWidth(0.88f),
-                        onClick         = onStopClick
-                    )
-                }
-            }
-
-            Spacer(modifier = Modifier.height(12.dp))
-
-            // ── Secondary actions: outlined for visual hierarchy ──────────────
-            Row(
-                modifier = Modifier.fillMaxWidth(0.88f),
-                horizontalArrangement = Arrangement.spacedBy(12.dp)
+                    .weight(1f)
+                    .fillMaxWidth(),
+                contentAlignment = Alignment.Center
             ) {
-                ActionButton(
-                    text            = "Chat",
-                    icon            = icons.chat,
-                    backgroundColor = colors.primary,
-                    outlined        = true,
-                    modifier        = Modifier.weight(1f),
-                    onClick         = onChatClick
-                )
-                ActionButton(
-                    text            = "Settings",
-                    icon            = icons.settings,
-                    backgroundColor = colors.tertiary,
-                    outlined        = true,
-                    modifier        = Modifier.weight(1f),
-                    onClick         = onSettingsClick
-                )
-            }
-
-            Spacer(modifier = Modifier.height(32.dp))
-
-            // ── Aura Debug Console — debug builds only ────────────────────────
-            if (BuildConfig.DEBUG) {
-                OutlinedButton(
-                    onClick = onAuraDebugClick,
-                    shape = androidx.compose.foundation.shape.RoundedCornerShape(8.dp),
-                    border = androidx.compose.foundation.BorderStroke(
-                        1.dp, colors.outline.copy(alpha = 0.5f)
-                    ),
-                    modifier = Modifier.fillMaxWidth(0.88f)
-                ) {
-                    Text(
-                        text = "🐛 Aura Debug",
-                        style = MaterialTheme.typography.labelMedium,
-                        color = colors.onSurface.copy(alpha = 0.6f)
+                // Subtle vertical gradient scrim at top of mic area to anchor text over Unity
+                if (auraActive) {
+                    Box(
+                        modifier = Modifier
+                            .fillMaxSize()
+                            .background(
+                                Brush.verticalGradient(
+                                    0f to Color.Transparent,
+                                    0.55f to Color.Transparent,
+                                    1f to if (isDaytime) Color.Black.copy(alpha = 0.10f)
+                                          else Color.Black.copy(alpha = 0.30f)
+                                )
+                            )
                     )
                 }
-                Spacer(modifier = Modifier.height(16.dp))
+
+                Column(
+                    horizontalAlignment = Alignment.CenterHorizontally,
+                    verticalArrangement = Arrangement.Center
+                ) {
+                    // Primary mic control — existing MicButton with all animations preserved
+                    MicButton(onClick = onStartClick)
+
+                    Spacer(modifier = Modifier.height(28.dp))
+
+                    // Compact status pill — replaces the large StatusCard
+                    StatusPill(
+                        assistantState = assistantState,
+                        statusColor    = statusColor,
+                        message        = statusMessage(assistantState),
+                        isDaytime      = isDaytime,
+                        auraActive     = auraActive
+                    )
+                }
+            }
+
+            // ── BOTTOM: Translucent action panel ─────────────────────────────
+            Box(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .background(
+                        color = bottomSurfaceColor,
+                        shape = RoundedCornerShape(topStart = 28.dp, topEnd = 28.dp)
+                    )
+                    .then(
+                        Modifier.padding(
+                            start = 24.dp, end = 24.dp,
+                            top = 20.dp, bottom = 0.dp
+                        )
+                    )
+                    .windowInsetsPadding(WindowInsets.navigationBars)
+            ) {
+                Column(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalAlignment = Alignment.CenterHorizontally
+                ) {
+                    // Top handle indicator
+                    Box(
+                        modifier = Modifier
+                            .align(Alignment.CenterHorizontally)
+                            .padding(bottom = 16.dp)
+                    ) {
+                        HorizontalDivider(
+                            modifier = Modifier.fillMaxWidth(0.12f),
+                            thickness = 3.dp,
+                            color = bottomBorderColor
+                        )
+                    }
+
+                    // ── Adaptive Start / Stop — cross-fades via AnimatedContent ──
+                    AnimatedContent(
+                        targetState = isStopped,
+                        transitionSpec = {
+                            (fadeIn(tween(240)) + scaleIn(tween(240), initialScale = 0.93f)) togetherWith
+                            (fadeOut(tween(180)) + scaleOut(tween(180), targetScale = 0.93f))
+                        },
+                        label = "start_stop_btn"
+                    ) { stopped ->
+                        if (stopped) {
+                            ActionButton(
+                                text            = "Start Assistant",
+                                icon            = icons.start,
+                                backgroundColor = colors.secondary,
+                                modifier        = Modifier.fillMaxWidth(),
+                                onClick         = onStartClick
+                            )
+                        } else {
+                            ActionButton(
+                                text            = "Stop Assistant",
+                                icon            = icons.stop,
+                                backgroundColor = colors.error,
+                                modifier        = Modifier.fillMaxWidth(),
+                                onClick         = onStopClick
+                            )
+                        }
+                    }
+
+                    Spacer(modifier = Modifier.height(10.dp))
+
+                    // ── Secondary actions: Chat + Settings ────────────────────
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.spacedBy(10.dp)
+                    ) {
+                        ActionButton(
+                            text            = "Chat",
+                            icon            = icons.chat,
+                            backgroundColor = colors.primary,
+                            outlined        = true,
+                            modifier        = Modifier.weight(1f),
+                            onClick         = onChatClick
+                        )
+                        ActionButton(
+                            text            = "Settings",
+                            icon            = icons.settings,
+                            backgroundColor = colors.tertiary,
+                            outlined        = true,
+                            modifier        = Modifier.weight(1f),
+                            onClick         = onSettingsClick
+                        )
+                    }
+
+                    // ── Aura Debug Console — debug builds only ────────────────
+                    if (BuildConfig.DEBUG) {
+                        Spacer(modifier = Modifier.height(8.dp))
+                        OutlinedButton(
+                            onClick = onAuraDebugClick,
+                            shape = RoundedCornerShape(8.dp),
+                            border = androidx.compose.foundation.BorderStroke(
+                                1.dp, bottomBorderColor
+                            ),
+                            modifier = Modifier.fillMaxWidth()
+                        ) {
+                            Text(
+                                text = "🐛 Aura Debug",
+                                style = MaterialTheme.typography.labelMedium,
+                                color = if (isDaytime) Color(0xFF1f2328).copy(alpha = 0.6f)
+                                        else colors.onSurface.copy(alpha = 0.5f)
+                            )
+                        }
+                    }
+
+                    Spacer(modifier = Modifier.height(12.dp))
+                }
             }
         }
     }

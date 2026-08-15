@@ -37,6 +37,8 @@ import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.hapticfeedback.HapticFeedbackType
 import androidx.compose.ui.platform.LocalHapticFeedback
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import com.toblad.khwab.state.AssistantState
@@ -77,6 +79,8 @@ fun MicButton(
     }
 
     val isListening = state == AssistantState.LISTENING
+    val isProcessing = state == AssistantState.THINKING || state == AssistantState.EXECUTING
+    val isSpeaking   = state == AssistantState.SPEAKING
 
     val transition = rememberInfiniteTransition(label = "mic_pulse")
 
@@ -125,9 +129,31 @@ fun MicButton(
         label = "outer_ring_alpha"
     )
 
-    val buttonSize: Dp = 160.dp
-    val ringSize: Dp   = 196.dp
-    val outerRingSize: Dp = 224.dp
+    // ── Processing ring — slow rotation-style pulse only for THINKING/EXECUTING
+    val processingRingAlpha by transition.animateFloat(
+        initialValue = if (isProcessing) 0.12f else 0f,
+        targetValue  = if (isProcessing) 0.32f else 0f,
+        animationSpec = infiniteRepeatable(
+            animation = tween(durationMillis = 1200, easing = FastOutSlowInEasing),
+            repeatMode = RepeatMode.Reverse
+        ),
+        label = "processing_ring_alpha"
+    )
+
+    // ── Speaking ring — gentle fade only for SPEAKING ─────────────────────────
+    val speakingRingAlpha by transition.animateFloat(
+        initialValue = if (isSpeaking) 0.15f else 0f,
+        targetValue  = if (isSpeaking) 0.38f else 0f,
+        animationSpec = infiniteRepeatable(
+            animation = tween(durationMillis = 800, easing = FastOutSlowInEasing),
+            repeatMode = RepeatMode.Reverse
+        ),
+        label = "speaking_ring_alpha"
+    )
+
+    val buttonSize: Dp = 152.dp
+    val ringSize: Dp   = 188.dp
+    val outerRingSize: Dp = 220.dp
 
     // Ring colour strategy:
     //   • Daytime Aura sky → white rings (they'd disappear on a bright background)
@@ -151,8 +177,28 @@ fun MicButton(
         else          -> colors.primary
     }
 
+    // Use state-specific ring color for processing/speaking states
+    val stateRingColor = when {
+        isProcessing -> KhwabProcessing
+        isSpeaking   -> KhwabSpeaking
+        else         -> ringColor
+    }
+
+    val stateDescription = when (state) {
+        AssistantState.STOPPED   -> "Microphone button, assistant stopped. Tap to start."
+        AssistantState.ERROR     -> "Microphone button, error state. Tap to retry."
+        AssistantState.READY     -> "Microphone button, ready. Tap or say Hey Khwab."
+        AssistantState.RUNNING   -> "Microphone button, listening for wake word."
+        AssistantState.LISTENING -> "Microphone button, actively listening."
+        AssistantState.THINKING  -> "Microphone button, processing request."
+        AssistantState.EXECUTING -> "Microphone button, executing command."
+        AssistantState.SPEAKING  -> "Microphone button, speaking response."
+    }
+
     Box(
-        modifier = modifier.size(outerRingSize),
+        modifier = modifier
+            .size(outerRingSize)
+            .semantics { contentDescription = stateDescription },
         contentAlignment = Alignment.Center
     ) {
         // ── Outer ripple ring — only LISTENING ────────────────────────────────
@@ -163,6 +209,26 @@ fun MicButton(
                     .scale(outerRingScale)
                     .clip(CircleShape)
                     .background(ringColor.copy(alpha = outerRingAlpha))
+            )
+        }
+
+        // ── Processing ring — THINKING / EXECUTING ────────────────────────────
+        if (isProcessing) {
+            Box(
+                modifier = Modifier
+                    .size(ringSize)
+                    .clip(CircleShape)
+                    .background(stateRingColor.copy(alpha = processingRingAlpha))
+            )
+        }
+
+        // ── Speaking ring — SPEAKING ──────────────────────────────────────────
+        if (isSpeaking) {
+            Box(
+                modifier = Modifier
+                    .size(ringSize)
+                    .clip(CircleShape)
+                    .background(stateRingColor.copy(alpha = speakingRingAlpha))
             )
         }
 
@@ -184,7 +250,7 @@ fun MicButton(
                 .scale(pulseScale),
             shape = CircleShape,
             colors = CardDefaults.cardColors(containerColor = colors.primary),
-            elevation = CardDefaults.cardElevation(defaultElevation = 18.dp),
+            elevation = CardDefaults.cardElevation(defaultElevation = 14.dp),
             onClick = {
                 haptic.performHapticFeedback(HapticFeedbackType.LongPress)
                 onClick()
@@ -199,7 +265,7 @@ fun MicButton(
                 com.toblad.khwab.aura.model.TimePhase.NOON,
                 com.toblad.khwab.aura.model.TimePhase.AFTERNOON
             )
-            val gradientEdge = if (isDaytimeMic) androidx.compose.ui.graphics.Color.Transparent
+            val gradientEdge = if (isDaytimeMic) Color.Transparent
                                else colors.background
 
             Box(
@@ -228,9 +294,9 @@ fun MicButton(
                 ) { isAura ->
                     Icon(
                         imageVector = if (isAura) auraIcon else Icons.Default.Mic,
-                        contentDescription = "Microphone",
+                        contentDescription = null, // described by parent Box semantics
                         tint = colors.onPrimary,
-                        modifier = Modifier.size(72.dp)
+                        modifier = Modifier.size(68.dp)
                     )
                 }
             }

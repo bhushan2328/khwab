@@ -3,6 +3,7 @@ package com.toblad.khwab.ui.theme
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 
+import androidx.compose.animation.AnimatedContent
 import androidx.compose.animation.animateColorAsState
 import androidx.compose.animation.core.FastOutSlowInEasing
 import androidx.compose.animation.core.RepeatMode
@@ -10,7 +11,13 @@ import androidx.compose.animation.core.animateFloat
 import androidx.compose.animation.core.infiniteRepeatable
 import androidx.compose.animation.core.rememberInfiniteTransition
 import androidx.compose.animation.core.tween
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.fadeOut
+import androidx.compose.animation.slideInVertically
+import androidx.compose.animation.slideOutVertically
+import androidx.compose.animation.togetherWith
 import androidx.compose.foundation.background
+import androidx.compose.foundation.border
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -23,6 +30,7 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.layout.wrapContentWidth
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.Card
@@ -37,6 +45,8 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.scale
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.lerp
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
@@ -174,6 +184,143 @@ fun StatusCard(
                     color = messageColor,
                     style = MaterialTheme.typography.bodyMedium,
                     textAlign = TextAlign.Center
+                )
+            }
+        }
+    }
+}
+
+/**
+ * Compact status pill displayed beneath the microphone button.
+ * Shows a pulsing dot + state label + contextual message in a
+ * small translucent chip so the Unity environment remains visible.
+ */
+@Composable
+fun StatusPill(
+    assistantState: AssistantState,
+    statusColor: Color,
+    message: String,
+    isDaytime: Boolean,
+    auraActive: Boolean
+) {
+    val colors = MaterialTheme.colorScheme
+
+    val dotShouldPulse = assistantState !in listOf(
+        AssistantState.STOPPED, AssistantState.ERROR, AssistantState.READY
+    )
+
+    val animatedDotColor by animateColorAsState(
+        targetValue = statusColor,
+        animationSpec = tween(durationMillis = 350),
+        label = "pill_dot_color"
+    )
+
+    val transition = rememberInfiniteTransition(label = "pill_dot_pulse")
+    val dotScale by transition.animateFloat(
+        initialValue = 1f,
+        targetValue  = if (dotShouldPulse) 1.5f else 1f,
+        animationSpec = infiniteRepeatable(
+            animation = tween(durationMillis = 650, easing = FastOutSlowInEasing),
+            repeatMode = RepeatMode.Reverse
+        ),
+        label = "pill_dot_scale"
+    )
+    val dotAlpha by transition.animateFloat(
+        initialValue = 1f,
+        targetValue  = if (dotShouldPulse) 0.35f else 1f,
+        animationSpec = infiniteRepeatable(
+            animation = tween(durationMillis = 650, easing = FastOutSlowInEasing),
+            repeatMode = RepeatMode.Reverse
+        ),
+        label = "pill_dot_alpha"
+    )
+
+    val pillBg = when {
+        isDaytime  -> Color.White.copy(alpha = 0.70f)
+        auraActive -> Color(0xFF0A0C18).copy(alpha = 0.78f)
+        else       -> Color(0xFF080A14).copy(alpha = 0.84f)
+    }
+    val pillBorder = when {
+        isDaytime  -> Color.White.copy(alpha = 0.50f)
+        else       -> animatedDotColor.copy(alpha = 0.35f)
+    }
+    val labelColor = when {
+        isDaytime  -> animatedDotColor.copy(alpha = 0.85f).run {
+            // Darken for daytime readability
+            Color(red * 0.7f, green * 0.7f, blue * 0.7f, 1f)
+        }
+        else       -> animatedDotColor
+    }
+    val msgColor = when {
+        isDaytime  -> Color(0xFF1f2328).copy(alpha = 0.75f)
+        auraActive -> colors.onSurface.copy(alpha = 0.70f)
+        else       -> colors.onSurface.copy(alpha = 0.80f)
+    }
+
+    Box(
+        modifier = Modifier
+            .wrapContentWidth()
+            .clip(RoundedCornerShape(50.dp))
+            .background(pillBg)
+            .border(
+                width = 1.dp,
+                color = pillBorder,
+                shape = RoundedCornerShape(50.dp)
+            )
+            .padding(horizontal = 20.dp, vertical = 10.dp)
+            .semantics { contentDescription = "Assistant status: ${assistantState.name}" }
+    ) {
+        Column(
+            horizontalAlignment = Alignment.CenterHorizontally,
+            verticalArrangement = Arrangement.spacedBy(4.dp)
+        ) {
+            // State label row: dot + label
+            Row(
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(7.dp)
+            ) {
+                Box(
+                    modifier = Modifier
+                        .size(8.dp)
+                        .scale(dotScale)
+                        .background(
+                            color = animatedDotColor.copy(alpha = dotAlpha),
+                            shape = CircleShape
+                        )
+                )
+                AnimatedContent(
+                    targetState = assistantState.name,
+                    transitionSpec = {
+                        (fadeIn(tween(200)) + slideInVertically { it / 3 }) togetherWith
+                        (fadeOut(tween(150)) + slideOutVertically { -it / 3 })
+                    },
+                    label = "pill_state_label"
+                ) { stateName ->
+                    Text(
+                        text = stateName.replace("_", " ").uppercase(),
+                        color = labelColor,
+                        style = MaterialTheme.typography.labelMedium,
+                        fontWeight = FontWeight.Bold,
+                        letterSpacing = 1.8.sp
+                    )
+                }
+            }
+
+            // Contextual message
+            AnimatedContent(
+                targetState = message,
+                transitionSpec = {
+                    (fadeIn(tween(300)) + slideInVertically { it / 2 }) togetherWith
+                    (fadeOut(tween(200)) + slideOutVertically { -it / 2 })
+                },
+                label = "pill_message"
+            ) { msg ->
+                Text(
+                    text = msg,
+                    color = msgColor,
+                    style = MaterialTheme.typography.bodySmall,
+                    textAlign = TextAlign.Center,
+                    maxLines = 2
                 )
             }
         }

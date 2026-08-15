@@ -25,6 +25,7 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontFamily
@@ -67,10 +68,10 @@ fun HeaderSection() {
         }
     }
     val date = remember {
-        SimpleDateFormat("dd MMMM yyyy", Locale.getDefault()).format(initialCalendar.time)
+        SimpleDateFormat("dd MMMM", Locale.getDefault()).format(initialCalendar.time)
     }
 
-    val time = SimpleDateFormat("hh:mm:ss a", Locale.getDefault()).format(currentTime)
+    val time = SimpleDateFormat("hh:mm a", Locale.getDefault()).format(currentTime)
 
     val colors = MaterialTheme.colorScheme
 
@@ -85,45 +86,47 @@ fun HeaderSection() {
     // When rendering over a bright daytime sky, swap to white text so the
     // header stays readable regardless of sky brightness.
     val greetingColor = if (isDaytime) Color.White else colors.onBackground
-    val nameColor     = if (isDaytime) Color.White.copy(alpha = 0.88f) else colors.onSurfaceVariant
-    val dateColor     = if (isDaytime) Color.White.copy(alpha = 0.78f) else colors.onSurfaceVariant
+    val nameColor     = if (isDaytime) Color.White.copy(alpha = 0.80f) else colors.onSurfaceVariant
+    val dateColor     = if (isDaytime) Color.White.copy(alpha = 0.72f) else colors.onSurfaceVariant.copy(alpha = 0.80f)
     val clockColor    = if (isDaytime) Color.White else colors.primary
 
     // Avatar badge: frosted semi-transparent in daytime, solid otherwise
     val avatarBg = if (isDaytime)
-        Color.White.copy(alpha = 0.28f) else colors.primaryContainer
+        Color.White.copy(alpha = 0.22f) else colors.primaryContainer
     val avatarTextColor = if (isDaytime) Color.White else colors.onPrimaryContainer
 
-    // Subtle dark scrim behind text so white text always has contrast,
-    // even on very bright skies (the scrim is invisible in dark mode)
-    val textScrim = if (isDaytime) Color.Black.copy(alpha = 0.12f) else Color.Transparent
+    // Translucent scrim pill — only shown in daytime for readability over bright sky
+    // Keep it very subtle so the sky still shows through
+    val scrimBg = if (isDaytime) Color.Black.copy(alpha = 0.08f) else Color.Transparent
 
     Row(
         modifier = Modifier.fillMaxWidth(),
         horizontalArrangement = Arrangement.SpaceBetween,
-        verticalAlignment = Alignment.Top
+        verticalAlignment = Alignment.CenterVertically
     ) {
         // ── Left: avatar badge + greeting + name ─────────────────────────────
         Row(
             verticalAlignment = Alignment.CenterVertically,
             horizontalArrangement = Arrangement.spacedBy(12.dp)
         ) {
-            // Circular avatar badge
+            // Circular avatar badge with subtle scrim for daytime contrast
             Box(
                 modifier = Modifier
-                    .size(48.dp)
+                    .size(44.dp)
+                    .clip(CircleShape)
+                    .background(color = scrimBg, shape = CircleShape)
                     .background(color = avatarBg, shape = CircleShape),
                 contentAlignment = Alignment.Center
             ) {
                 Text(
                     text = avatarInitial,
                     color = avatarTextColor,
-                    fontSize = 20.sp,
+                    fontSize = 18.sp,
                     fontWeight = FontWeight.Bold
                 )
             }
 
-            Column {
+            Column(verticalArrangement = Arrangement.spacedBy(1.dp)) {
                 AnimatedContent(
                     targetState = greeting,
                     transitionSpec = {
@@ -131,24 +134,17 @@ fun HeaderSection() {
                     },
                     label = "greeting_anim"
                 ) { greetingText ->
-                    // Scrim pill behind greeting text for contrast over bright skies
-                    Box(
-                        modifier = Modifier
-                            .background(textScrim, RoundedCornerShape(6.dp))
-                            .padding(horizontal = if (isDaytime) 4.dp else 0.dp)
-                    ) {
-                        Text(
-                            text = greetingText,
-                            color = greetingColor,
-                            fontSize = 24.sp,
-                            fontWeight = FontWeight.Bold
-                        )
-                    }
+                    Text(
+                        text = greetingText,
+                        color = greetingColor,
+                        style = MaterialTheme.typography.titleMedium,
+                        fontWeight = FontWeight.Bold
+                    )
                 }
                 Text(
                     text = displayName,
                     color = nameColor,
-                    fontSize = 16.sp,
+                    style = MaterialTheme.typography.bodySmall,
                     fontWeight = FontWeight.Medium
                 )
             }
@@ -157,20 +153,20 @@ fun HeaderSection() {
         // ── Right: date + live clock ──────────────────────────────────────────
         Column(
             horizontalAlignment = Alignment.End,
-            modifier = Modifier.padding(top = 4.dp)
+            verticalArrangement = Arrangement.spacedBy(2.dp)
         ) {
             Text(
                 text = date,
                 color = dateColor,
-                fontSize = 13.sp,
+                style = MaterialTheme.typography.bodySmall,
                 fontWeight = FontWeight.Medium
             )
             Text(
                 text = time,
                 color = clockColor,
-                fontSize = 19.sp,
+                fontSize = 16.sp,
                 fontWeight = FontWeight.Bold,
-                fontFamily = FontFamily.Monospace
+                fontFamily = JBMonoFamily
             )
         }
     }
