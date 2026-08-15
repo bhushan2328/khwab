@@ -4,7 +4,6 @@ import android.content.Context
 import android.media.MediaPlayer
 import com.toblad.khwab.aura.model.TimePhase
 import com.toblad.khwab.aura.model.WeatherState
-import com.toblad.khwab.aura.ui.LightningBus
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
@@ -13,18 +12,19 @@ import kotlinx.coroutines.launch
 
 /**
  * Plays looping ambient audio that follows Aura's real
- * current weather and time of day, plus thunder hits synced
- * to the exact same LightningBus events that drive the
- * visual lightning flash in WeatherLayer.
+ * current weather and time of day.
  *
  * Audio files are loaded dynamically by name from res/raw/
  * so missing files are skipped silently — no compile errors.
  *
  * Expected files in app/src/main/res/raw/ (add when ready):
- * rain_loop, storm_loop, thunder_hit, wind_loop,
- * snow_ambience, night_crickets, day_birds
+ * rain_loop, storm_loop, wind_loop, snow_ambience,
+ * night_crickets, day_birds
  *
  * Started/stopped by AuraBridge — not called directly.
+ *
+ * Note: The 2D LightningBus thunder-sync was removed when the old 2D Aura
+ * module was retired. Unity handles visual lightning independently.
  */
 class AmbientSoundController(
     context: Context
@@ -35,7 +35,6 @@ class AmbientSoundController(
     private val scope = CoroutineScope(Dispatchers.Main)
 
     private var snapshotJob: Job? = null
-    private var thunderJob: Job? = null
 
     private var weatherPlayer: MediaPlayer? = null
     private var timePlayer: MediaPlayer? = null
@@ -58,11 +57,6 @@ class AmbientSoundController(
 
         snapshotJob?.cancel()
         snapshotJob = null
-
-        thunderJob?.cancel()
-        thunderJob = null
-
-        LightningBus.update(stormActive = false, intensity = 0f)
 
         fadeOutAndRelease(weatherPlayer)
         fadeOutAndRelease(timePlayer)
@@ -92,26 +86,6 @@ class AmbientSoundController(
         if (timeRes != currentTimeRes) {
             switchLoop(isWeather = false, newRes = timeRes)
         }
-
-        val isStorm = theme.weatherState == WeatherState.STORM
-
-        LightningBus.update(
-            stormActive = isStorm,
-            intensity = theme.profile.stormIntensity
-        )
-
-        if (isStorm) {
-            if (thunderJob?.isActive != true) {
-                thunderJob = scope.launch {
-                    LightningBus.flashes.collect {
-                        playThunderHit()
-                    }
-                }
-            }
-        } else {
-            thunderJob?.cancel()
-            thunderJob = null
-        }
     }
 
     private fun silenceLoopsIfPlaying() {
@@ -127,11 +101,6 @@ class AmbientSoundController(
             timePlayer = null
             currentTimeRes = null
         }
-
-        thunderJob?.cancel()
-        thunderJob = null
-
-        LightningBus.update(stormActive = false, intensity = 0f)
     }
 
     private fun weatherResFor(weather: WeatherState): String? = when (weather) {
@@ -180,20 +149,6 @@ class AmbientSoundController(
             }
         } catch (e: Exception) {
             null
-        }
-    }
-
-    private fun playThunderHit() {
-
-        try {
-            val resId = rawResId("thunder_hit")
-            if (resId == 0) return  // file not added yet — skip silently
-            MediaPlayer.create(appContext, resId)?.apply {
-                setOnCompletionListener { it.release() }
-                start()
-            }
-        } catch (e: Exception) {
-            // Missing or broken asset — skip silently.
         }
     }
 

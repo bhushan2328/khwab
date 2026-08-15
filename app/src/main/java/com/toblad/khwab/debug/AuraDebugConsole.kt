@@ -37,7 +37,6 @@ import androidx.compose.ui.unit.dp
 import com.toblad.khwab.aura.AuraBridge
 import com.toblad.khwab.aura.model.AuraState
 import com.toblad.khwab.aura.model.WeatherState
-import com.toblad.khwab.aura.ui.LightningBus
 
 /**
  * Debug-only Aura Testing Console.
@@ -173,18 +172,6 @@ fun AuraDebugConsole(
                         contentColor   = if (!isActive) colors.onError else colors.onSurfaceVariant
                     )
                 ) { Text("DEACTIVATE") }
-            }
-
-            // ── Lightning ─────────────────────────────────────────────────────
-            DebugSectionHeader("Lightning")
-
-            Button(
-                onClick = { LightningBus.triggerNow() },
-                shape = RoundedCornerShape(8.dp),
-                colors = ButtonDefaults.buttonColors(containerColor = Color(0xFFFFD600)),
-                modifier = Modifier.fillMaxWidth()
-            ) {
-                Text("TRIGGER LIGHTNING", color = Color.Black)
             }
 
             // ── Current State ─────────────────────────────────────────────────

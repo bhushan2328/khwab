@@ -1,11 +1,11 @@
 package com.toblad.khwab.aura
 
 import android.content.Context
-import com.toblad.khwab.aura.api.AuraApi
-import com.toblad.khwab.aura.manager.AuraManager
+import android.util.Log
 import com.toblad.khwab.aura.model.AuraConfig
 import com.toblad.khwab.aura.model.AuraState
 import com.toblad.khwab.aura.model.AuraTheme
+import com.toblad.khwab.aura.model.TimePhase
 import com.toblad.khwab.aura.model.WeatherState
 import com.toblad.khwab.environment.AuraEnvironmentSync
 import com.toblad.khwab.environment.AuraSyncScheduler
@@ -16,8 +16,9 @@ import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
-import kotlinx.coroutines.flow.drop
 import kotlinx.coroutines.launch
+
+private const val TAG = "AuraBridge"
 
 /**
  * Single combined snapshot of Aura's live state, exposed as a
@@ -30,49 +31,58 @@ data class AuraSnapshot(
 )
 
 /**
- * Android bridge to the Aura library.
+ * Android-side controller for the Unity Khwab Aura.
  *
- * This is the only place inside the Android app that
- * communicates directly with the Aura module, and now also
- * owns the background weather sync loop and ambient sound —
- * so every entry point (voice command, Settings screen,
- * app-relaunch resume) behaves identically.
+ * This is the only place inside the Android app that drives Aura
+ * activation/deactivation, config persistence, and environment sync.
+ *
+ * All rendering is delegated to Unity via [UnityAuraBridge].
+ * The old 2D AuraManager/AuraApi dependency has been removed.
+ *
+ * Every entry point — voice command, Settings screen, app-relaunch
+ * restore — must route through this object so behaviour is identical.
  */
 object AuraBridge {
 
-    private val aura: AuraApi = AuraManager()
-
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
 
-    @Volatile
-    private var configStore: AuraConfigStore? = null
+    @Volatile private var configStore: AuraConfigStore? = null
     private var environmentSync: AuraEnvironmentSync? = null
     private var syncScheduler: AuraSyncScheduler? = null
     private var ambientSound: AmbientSoundController? = null
 
-    @Volatile
-    private var initialized = false
+    @Volatile private var _config = AuraConfig()
+    @Volatile private var _auraState = AuraState.OFF
 
-    private val _snapshotFlow =
-        MutableStateFlow(AuraSnapshot(aura.getTheme(), aura.getConfig()))
+    /**
+     * The current time phase used to populate [AuraTheme].
+     * Derived from the device clock on each theme push.
+     */
+    @Volatile private var _timePhase = TimePhase.MORNING
+    @Volatile private var _weatherState = WeatherState.CLEAR
+
+    @Volatile private var initialized = false
+
+    private val _snapshotFlow = MutableStateFlow(
+        AuraSnapshot(AuraTheme(), AuraConfig())
+    )
 
     /**
      * Live combined theme + config state. Collect this instead
-     * of polling getTheme()/getConfig() — it emits exactly
-     * when something real changes.
+     * of polling — it emits exactly when something real changes.
      */
     val snapshotFlow: StateFlow<AuraSnapshot> = _snapshotFlow.asStateFlow()
+
+    // ── Public API ────────────────────────────────────────────────────────────
 
     /**
      * Loads saved preferences, resumes Aura if it was left on,
      * and prepares the background sync/sound components.
      *
-     * Call this once at app startup, before Aura is used — see
-     * MainActivity.onCreate. Safe to call more than once; only
-     * the first call has effect.
+     * Call once at app startup before Aura is used — see MainActivity.onCreate.
+     * Safe to call more than once; only the first call has effect.
      */
     fun initialize(context: Context) {
-
         if (initialized) return
         initialized = true
 
@@ -83,134 +93,148 @@ object AuraBridge {
         syncScheduler = AuraSyncScheduler(app)
         ambientSound = AmbientSoundController(app)
 
-        val restored = configStore!!.applySaved(aura.getConfig())
+        // Restore saved user preferences.
+        val saved = configStore!!.applySaved(AuraConfig())
+        _config = saved
 
-        aura.updateConfig(restored.copy(enabled = aura.getConfig().enabled))
-
-        if (restored.enabled && !aura.isActive()) {
-            aura.activate()
-        } else if (!restored.enabled && aura.isActive()) {
-            aura.deactivate()
-        }
-
-        if (aura.isActive()) {
+        // Restore activation state: if Aura was left enabled, re-activate.
+        // Unity may not be ready yet — UnityAuraBridge queues the command.
+        if (saved.enabled) {
+            _auraState = AuraState.STARTING
             ThemeController.enableAura()
             startBackgroundSync()
+            UnityAuraBridge.activate()   // queued until Unity is ready
+            Log.d(TAG, "initialize: restored enabled=true, ActivateAura queued")
+        } else {
+            _auraState = AuraState.OFF
+            ThemeController.disableAura()
         }
 
-        pushTheme()
-
-        // Forward AuraManager's periodic background refreshes (every 60 s) to the
-        // UI layer. Without this collector, AuraManager.refreshScope updates
-        // _themeFlow but ThemeController.currentAuraTheme never advances past the
-        // theme generated at activate/initialize time, so solarElevNorm,
-        // timePhase, and moon/star visibility all go stale — making moon and stars
-        // invisible when the app is opened during the day and checked at night.
-        // drop(1): the initial value is already pushed above via pushTheme().
-        scope.launch(Dispatchers.Main) {
-            aura.themeFlow
-                .drop(1)
-                .collect { theme ->
-                    ThemeController.updateAuraTheme(theme)
-                    _snapshotFlow.value = AuraSnapshot(theme, aura.getConfig())
-                }
-        }
+        pushSnapshot()
     }
 
+    /**
+     * Activates Unity Aura:
+     * - Marks Aura as STARTING
+     * - Enables ThemeController (transparent Compose background)
+     * - Persists enabled=true
+     * - Starts weather/location background sync
+     * - Sends ActivateAura to Unity (queued if Unity isn't ready yet)
+     */
     fun activate() {
-        aura.activate()
+        _config = _config.copy(enabled = true)
+        _auraState = AuraState.STARTING
+        configStore?.save(_config)
         ThemeController.enableAura()
-        configStore?.save(aura.getConfig())
         startBackgroundSync()
-        pushTheme()
+        pushSnapshot()
+        UnityAuraBridge.activate()
+        Log.d(TAG, "activate() called")
     }
 
+    /**
+     * Deactivates Unity Aura:
+     * - Marks Aura as OFF
+     * - Disables ThemeController
+     * - Persists enabled=false
+     * - Stops background sync
+     * - Sends DeactivateAura to Unity
+     */
     fun deactivate() {
-        aura.deactivate()
+        _config = _config.copy(enabled = false)
+        _auraState = AuraState.OFF
+        configStore?.save(_config)
         ThemeController.disableAura()
-        configStore?.save(aura.getConfig())
         stopBackgroundSync()
-        pushTheme()
+        pushSnapshot()
+        UnityAuraBridge.deactivate()
+        Log.d(TAG, "deactivate() called")
     }
 
     fun toggle() {
-        if (aura.isActive()) {
-            deactivate()
-        } else {
+        if (isActive()) deactivate() else activate()
+    }
+
+    /** Returns true when Aura is enabled (active or starting). */
+    fun isActive(): Boolean =
+        _auraState == AuraState.ACTIVE || _auraState == AuraState.STARTING
+
+    fun getState(): AuraState = _auraState
+
+    /** Returns the current Aura theme snapshot. */
+    fun getTheme(): AuraTheme = _snapshotFlow.value.theme
+
+    fun getConfig(): AuraConfig = _config
+
+    /**
+     * Updates Aura config and persists user-facing preference fields.
+     * Location and storm intensity are not persisted — they are live values.
+     */
+    fun updateConfig(config: AuraConfig) {
+        _config = config
+        configStore?.save(config)
+        // Sync enabled state with activation
+        if (config.enabled && !isActive()) {
             activate()
+            return
+        } else if (!config.enabled && isActive()) {
+            deactivate()
+            return
+        }
+        pushSnapshot()
+    }
+
+    /**
+     * Supplies Aura with fresh real-world weather.
+     * Forwards weather to Unity so it can update its weather system.
+     */
+    fun updateWeather(weather: WeatherState) {
+        _weatherState = weather
+        pushSnapshot()
+        if (isActive()) {
+            UnityAuraBridge.setWeather(weather)
         }
     }
 
-    fun isActive(): Boolean =
-        aura.isActive()
-
-    fun getState(): AuraState =
-        aura.getState()
-
-    fun getTheme(): AuraTheme =
-        aura.getTheme()
-
-    fun getConfig(): AuraConfig =
-        aura.getConfig()
-
     /**
-     * Updates Aura's config and persists the user-facing
-     * preference fields. Location and storm intensity are
-     * deliberately not persisted — those are live values
-     * refreshed independently by AuraEnvironmentSync.
-     */
-    fun updateConfig(config: AuraConfig) {
-        aura.updateConfig(config)
-        configStore?.save(config)
-        pushTheme()
-    }
-
-    /**
-     * Supplies Aura with fresh, real-world weather (fetched
-     * from the device's actual location) so the next
-     * generated theme reflects real conditions.
-     */
-    fun updateWeather(weather: WeatherState) {
-        aura.updateWeather(weather)
-        pushTheme()
-    }
-
-    /**
-     * Supplies Aura with the device's real coordinates so it
-     * can compute real sunrise/sunset, moon phase and season
-     * for this location instead of fixed generic defaults.
+     * Supplies Aura with the device's real coordinates.
      */
     fun updateLocation(latitude: Double, longitude: Double) {
-        aura.updateConfig(
-            aura.getConfig().copy(
-                latitude = latitude,
-                longitude = longitude
-            )
-        )
-        pushTheme()
+        _config = _config.copy(latitude = latitude, longitude = longitude)
+        pushSnapshot()
+        if (isActive()) {
+            UnityAuraBridge.setLocation(latitude, longitude)
+        }
     }
 
     /**
-     * Supplies Aura with a real-world storm severity score
-     * (0.0–1.0), derived from live wind speed/precipitation.
+     * Supplies a storm severity score (0.0–1.0).
      */
     fun updateStormIntensity(intensity: Float) {
-        aura.updateConfig(
-            aura.getConfig().copy(
-                stormIntensity = intensity.coerceIn(0f, 1f)
-            )
-        )
-        pushTheme()
+        _config = _config.copy(stormIntensity = intensity.coerceIn(0f, 1f))
+        pushSnapshot()
     }
 
     fun refresh() {
-        aura.refresh()
-        pushTheme()
+        pushSnapshot()
+        if (isActive()) {
+            val lat = _config.latitude
+            val lon = _config.longitude
+            if (lat != null && lon != null) {
+                UnityAuraBridge.setLocation(lat, lon)
+            }
+            UnityAuraBridge.setWeather(_weatherState)
+            UnityAuraBridge.syncRealTime()
+        }
     }
+
+    // ── Internal ──────────────────────────────────────────────────────────────
 
     private fun startBackgroundSync() {
         environmentSync?.hydrateFromCache()
-        scope.launch { environmentSync?.sync() }
+        scope.launch {
+            try { environmentSync?.sync() } catch (_: Exception) {}
+        }
         syncScheduler?.start()
         ambientSound?.start()
     }
@@ -221,12 +245,67 @@ object AuraBridge {
     }
 
     /**
-     * Pushes the latest Aura profile into the UI theme layer
-     * and republishes the combined snapshot for any collector
-     * (ambient sound, future observers).
+     * Builds an [AuraTheme] from current Android-side state and emits
+     * it via [snapshotFlow]. Also notifies [ThemeController].
+     *
+     * The time phase is derived from the device clock so the Compose UI
+     * has an approximate phase for icon/color selection even before Unity
+     * reports its own state.
      */
-    private fun pushTheme() {
-        ThemeController.updateAuraTheme(aura.getTheme())
-        _snapshotFlow.value = AuraSnapshot(aura.getTheme(), aura.getConfig())
+    private fun pushSnapshot() {
+        val timePhase = currentTimePhase()
+        _timePhase = timePhase
+
+        val theme = AuraTheme(
+            auraState = _auraState,
+            timePhase = timePhase,
+            weatherState = _weatherState,
+            enabled = _config.enabled,
+            animationsEnabled = _config.animationsEnabled,
+            solarElevNorm = currentSolarElevNorm(timePhase),
+            isSolarAccurate = _config.latitude != null
+        )
+
+        ThemeController.updateAuraTheme(theme)
+        _snapshotFlow.value = AuraSnapshot(theme, _config)
+    }
+
+    // ── Time-phase helpers ────────────────────────────────────────────────────
+
+    /**
+     * Derives an approximate [TimePhase] from the device's local clock.
+     * Used for Android-side icon and color decisions only — Unity
+     * independently computes accurate solar elevation from GPS.
+     */
+    private fun currentTimePhase(): TimePhase {
+        val hour = java.util.Calendar.getInstance()
+            .get(java.util.Calendar.HOUR_OF_DAY)
+        return when (hour) {
+            in 4..5   -> TimePhase.PRE_DAWN
+            6         -> TimePhase.SUNRISE
+            in 7..10  -> TimePhase.MORNING
+            in 11..13 -> TimePhase.NOON
+            in 14..16 -> TimePhase.AFTERNOON
+            in 17..18 -> TimePhase.SUNSET
+            in 19..20 -> TimePhase.EVENING
+            in 21..22 -> TimePhase.NIGHT
+            else      -> TimePhase.MIDNIGHT
+        }
+    }
+
+    /**
+     * Approximate normalised solar elevation from [TimePhase].
+     * Sufficient for Compose UI tint decisions.
+     */
+    private fun currentSolarElevNorm(phase: TimePhase): Float = when (phase) {
+        TimePhase.MIDNIGHT  -> -1.0f
+        TimePhase.PRE_DAWN  -> -0.5f
+        TimePhase.SUNRISE   ->  0.0f
+        TimePhase.MORNING   ->  0.5f
+        TimePhase.NOON      ->  1.0f
+        TimePhase.AFTERNOON ->  0.6f
+        TimePhase.SUNSET    ->  0.0f
+        TimePhase.EVENING   -> -0.2f
+        TimePhase.NIGHT     -> -0.7f
     }
 }

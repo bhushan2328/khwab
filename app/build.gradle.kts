@@ -18,7 +18,7 @@ android {
 
     defaultConfig {
         applicationId = "com.toblad.khwab"
-        minSdk = 24
+        minSdk = 26
         targetSdk = 36
         versionCode = 1
         versionName = "1.0"
@@ -35,10 +35,14 @@ android {
         buildConfigField("String", "OPENROUTER_API_KEY",
             "\"${localProps.getProperty("OPENROUTER_API_KEY", "")}\"")
 
-        // No native ABI filter needed — Sherpa-ONNX .so files are downloaded
-        // at runtime from GitHub Releases and loaded via System.load().
-        // Keeping the block empty means the APK contains no bundled native libs
-        // from the sherpa AAR, which was the primary source of the 57 MB overhead.
+        // Support both arm64-v8a (64-bit devices) and armeabi-v7a (32-bit ROM devices
+        // such as POCO C3 which ships with a 32-bit Android userspace despite having a
+        // 64-bit CPU). Unity 6000.5.7f1 ships armeabi-v7a static libs in its Variations
+        // folder, so the IL2CPP build produces valid .so files for both ABIs.
+        ndk {
+            abiFilters += "arm64-v8a"
+            abiFilters += "armeabi-v7a"
+        }
     }
 
     buildTypes {
@@ -68,6 +72,13 @@ dependencies {
 
     implementation(project(":core"))
     implementation(project(":integration"))
+    implementation(project(":unityLibrary"))
+
+    // Unity classes JAR — needed to reference UnityPlayerForActivityOrService and
+    // IUnityPlayerLifecycleEvents in UnityAuraManager.  The JAR is already bundled
+    // inside :unityLibrary at runtime; this entry adds it to the :app compile classpath
+    // only, so the classes are resolvable at compile time without being double-packaged.
+    compileOnly(files("../../khwab-aura-unity/export/unityLibrary/libs/unity-classes.jar"))
 
     // Coroutines (Android main-thread dispatcher for VoiceService scope)
     implementation("org.jetbrains.kotlinx:kotlinx-coroutines-android:1.10.2")
@@ -100,7 +111,6 @@ dependencies {
     implementation(libs.androidx.compose.ui)
     implementation(libs.androidx.compose.ui.graphics)
     implementation(libs.androidx.compose.ui.tooling.preview)
-    implementation(project(":aura"))
     implementation(libs.androidx.core.ktx)
 
     implementation(libs.androidx.lifecycle.runtime.ktx)

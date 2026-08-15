@@ -20,6 +20,7 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import com.toblad.khwab.aura.AuraBridge
+import com.toblad.khwab.aura.UnityAuraManager
 import com.toblad.khwab.chat.ChatActivity
 import com.toblad.khwab.logging.LogModule
 import com.toblad.khwab.logging.Logger
@@ -48,8 +49,20 @@ class MainActivity : ComponentActivity() {
     // Compose state — drives the accessibility onboarding dialog.
     private var showAccessibilityDialog by mutableStateOf(false)
 
+    override fun onStart() {
+        super.onStart()
+        UnityAuraManager.start()
+    }
+
+    override fun onStop() {
+        super.onStop()
+        UnityAuraManager.stop()
+    }
+
     override fun onResume() {
         super.onResume()
+        UnityAuraManager.resume()
+        UnityAuraManager.attachTo(this)
         if (pendingOverlayPermission) {
             pendingOverlayPermission = false
             val permissionManager = PermissionManager(this)
@@ -71,6 +84,12 @@ class MainActivity : ComponentActivity() {
                 moveTaskToBack(true)
             }
         }
+    }
+
+    override fun onPause() {
+        UnityAuraManager.detachFrom(this)
+        UnityAuraManager.pause()
+        super.onPause()
     }
 
     override fun onCreate(savedInstanceState: Bundle?) {

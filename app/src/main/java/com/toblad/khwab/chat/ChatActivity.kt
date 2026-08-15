@@ -4,6 +4,7 @@ import android.os.Bundle
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.lifecycle.ViewModelProvider
+import com.toblad.khwab.aura.UnityAuraManager
 import com.toblad.khwab.chat.ui.ChatScreen
 import com.toblad.khwab.chat.ui.ChatViewModel
 import com.toblad.khwab.ui.theme.KhwabTheme
@@ -23,6 +24,23 @@ class ChatActivity : ComponentActivity() {
         }
     }
 
+    override fun onStart() {
+        super.onStart()
+        UnityAuraManager.start()
+    }
+
+    override fun onResume() {
+        super.onResume()
+        UnityAuraManager.resume()
+        UnityAuraManager.attachTo(this)
+    }
+
+    override fun onPause() {
+        UnityAuraManager.detachFrom(this)
+        UnityAuraManager.pause()
+        super.onPause()
+    }
+
     /**
      * Cancel any in-flight execution loop when the user leaves ChatActivity
      * (e.g. an app was launched and they are now in that app). This prevents
@@ -31,6 +49,7 @@ class ChatActivity : ComponentActivity() {
      */
     override fun onStop() {
         super.onStop()
+        UnityAuraManager.stop()
         // Retrieve the existing ViewModel without creating a new one.
         val vm = ViewModelProvider(this)[ChatViewModel::class.java]
         vm.cancelExecution()

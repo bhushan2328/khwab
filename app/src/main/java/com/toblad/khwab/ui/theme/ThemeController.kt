@@ -4,6 +4,8 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
 import com.toblad.khwab.aura.model.AuraTheme
+import com.toblad.khwab.aura.model.WeatherState
+import com.toblad.khwab.aura.model.TimePhase
 
 object ThemeController {
 
@@ -11,16 +13,14 @@ object ThemeController {
         private set
 
     /**
-     * Colors derived from Aura's latest real-world profile
-     * (sky, weather, ambient light). Recomputed by
-     * [updateAuraTheme] whenever Aura refreshes with new
-     * location, weather, or time data.
+     * Colors derived from Aura's current weather + time of day.
+     * Recomputed by [updateAuraTheme] whenever AuraBridge pushes new state.
      */
-    var currentAuraColors by mutableStateOf(auraColorScheme(AuraTheme().profile))
+    var currentAuraColors by mutableStateOf(defaultAuraColors())
         private set
 
     /**
-     * Live Aura theme snapshot (weather, time phase, sun/moon).
+     * Live Aura theme snapshot (weather, time phase, aura state).
      * Updated every time AuraBridge pushes a new theme so that
      * any composable reading this state recomposes automatically.
      */
@@ -49,14 +49,18 @@ object ThemeController {
     }
 
     /**
-     * Recomputes the live Aura color scheme and stores the
-     * latest theme snapshot from a fresh [AuraTheme] reflecting
-     * real sky/weather/light conditions.
+     * Recomputes the live Aura color scheme from [theme]'s weather and time phase,
+     * and stores the latest theme snapshot for Compose observability.
      */
     fun updateAuraTheme(theme: AuraTheme) {
         currentAuraTheme = theme
-        currentAuraColors = auraColorScheme(theme.profile)
+        currentAuraColors = auraColorScheme(theme.weatherState, theme.timePhase)
     }
-    // fix #8: removed updateAuraProfile — dead code that caused stale currentAuraTheme
-    // if called (colors updated but theme snapshot lagged behind). Use updateAuraTheme().
+
+    /**
+     * Returns a default Aura color scheme (morning / clear) used before the
+     * first theme push arrives from AuraBridge.
+     */
+    private fun defaultAuraColors() =
+        auraColorScheme(WeatherState.CLEAR, TimePhase.MORNING)
 }

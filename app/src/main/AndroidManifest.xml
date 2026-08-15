@@ -1,6 +1,7 @@
 <?xml version="1.0" encoding="utf-8"?>
 <manifest xmlns:android="http://schemas.android.com/apk/res/android"
-    xmlns:tools="http://schemas.android.com/tools">
+    xmlns:tools="http://schemas.android.com/tools"
+    tools:ignore="MissingPermission">
 
     <uses-permission android:name="android.permission.RECORD_AUDIO" />
     <uses-permission android:name="android.permission.SYSTEM_ALERT_WINDOW" />
@@ -27,7 +28,9 @@
         android:roundIcon="@mipmap/ic_launcher_round"
         android:supportsRtl="true"
         android:theme="@style/Theme.Khwab"
-        android:usesCleartextTraffic="false">
+        android:usesCleartextTraffic="false"
+        tools:replace="android:icon"
+        tools:remove="android:appCategory,android:extractNativeLibs">
 
         <activity
             android:name=".chat.ChatActivity"
@@ -54,6 +57,16 @@
             </intent-filter>
 
         </activity>
+
+        <!--
+            Override Unity GameActivity: keep it non-exported so it does not
+            appear as a launchable entry point. Unity still registers it via
+            manifest merge; we just prevent it from being exported.
+        -->
+        <activity
+            android:name="com.unity3d.player.GameActivity"
+            android:exported="false"
+            tools:replace="android:exported" />
 
         <service
             android:name=".service.VoiceService"

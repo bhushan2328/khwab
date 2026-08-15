@@ -45,10 +45,13 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.unit.dp
 import com.toblad.khwab.aura.AuraBridge
 import com.toblad.khwab.aura.model.AuraConfig
+import com.toblad.khwab.ui.theme.ThemeController
+import com.toblad.khwab.ui.theme.ThemeMode
 
 /**
  * Lets the user control Aura's behavior: whether it's on,
@@ -71,8 +74,10 @@ fun SettingsScreen(
     }
 
     val colors = MaterialTheme.colorScheme
+    val auraActive = ThemeController.currentTheme == ThemeMode.AURA
 
     Scaffold(
+        containerColor = if (auraActive) Color.Transparent else colors.background,
         topBar = {
             TopAppBar(
                 title = { Text("Settings", style = MaterialTheme.typography.titleLarge) },
@@ -92,19 +97,22 @@ fun SettingsScreen(
         }
     ) { padding ->
 
-        // fix #14: subtle top-to-background gradient for visual depth
-        Box(
-            modifier = Modifier
-                .fillMaxSize()
-                .background(
-                    UiBrush.verticalGradient(
-                        colors = listOf(
-                            colors.primaryContainer.copy(alpha = 0.12f),
-                            colors.background
+        // When Aura is active the background is transparent so Unity shows through.
+        // When inactive: subtle top-to-background gradient for visual depth (fix #14).
+        if (!auraActive) {
+            Box(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .background(
+                        UiBrush.verticalGradient(
+                            colors = listOf(
+                                colors.primaryContainer.copy(alpha = 0.12f),
+                                colors.background
+                            )
                         )
                     )
-                )
-        ) {}
+            ) {}
+        }
 
         Column(
             modifier = Modifier

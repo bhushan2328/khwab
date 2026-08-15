@@ -44,7 +44,6 @@ import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.unit.dp
 import com.toblad.khwab.aura.model.TimePhase
-import com.toblad.khwab.aura.ui.AuraScene
 import com.toblad.khwab.state.AssistantState
 import com.toblad.khwab.state.AssistantStateManager
 
@@ -101,22 +100,22 @@ fun HomeScreen(
 
     // When Aura is off, show a time-aware gradient fallback so the home screen
     // doesn't stay pure dark-navy during daytime. Background only — no particles.
-    val fallbackBg: Modifier = if (!auraActive) {
-        val hour = remember { java.util.Calendar.getInstance().get(java.util.Calendar.HOUR_OF_DAY) }
-        val (topC, botC) = when {
-            hour in 5..7   -> Color(0xFF0D1433) to Color(0xFF3D2B1F)  // pre-dawn: deep blue to warm dark
-            hour in 8..11  -> Color(0xFF0A1628) to Color(0xFF1A3A5C)  // morning: deep ocean blue
-            hour in 12..14 -> Color(0xFF0C1A2E) to Color(0xFF163354)  // noon: navy depth
-            hour in 15..17 -> Color(0xFF0E1830) to Color(0xFF2A1B3D)  // afternoon: blue-purple
-            hour in 18..20 -> Color(0xFF1A0E2E) to Color(0xFF3D1A12)  // sunset: deep violet-red
-            hour in 21..22 -> Color(0xFF090D1A) to Color(0xFF131B2E)  // evening: near-black blue
-            else           -> Color(0xFF040608) to Color(0xFF080D14)  // night: true OLED dark
+    // When Aura is active, the background is fully transparent so Unity renders through.
+    val fallbackBg: Modifier = when {
+        auraActive -> Modifier  // transparent — Unity surface shows through
+        else -> {
+            val hour = remember { java.util.Calendar.getInstance().get(java.util.Calendar.HOUR_OF_DAY) }
+            val (topC, botC) = when {
+                hour in 5..7   -> Color(0xFF0D1433) to Color(0xFF3D2B1F)
+                hour in 8..11  -> Color(0xFF0A1628) to Color(0xFF1A3A5C)
+                hour in 12..14 -> Color(0xFF0C1A2E) to Color(0xFF163354)
+                hour in 15..17 -> Color(0xFF0E1830) to Color(0xFF2A1B3D)
+                hour in 18..20 -> Color(0xFF1A0E2E) to Color(0xFF3D1A12)
+                hour in 21..22 -> Color(0xFF090D1A) to Color(0xFF131B2E)
+                else           -> Color(0xFF040608) to Color(0xFF080D14)
+            }
+            Modifier.background(Brush.verticalGradient(listOf(topC, botC)))
         }
-        Modifier.background(
-            Brush.verticalGradient(listOf(topC, botC))
-        )
-    } else {
-        Modifier.background(colors.background)
     }
 
     Box(
@@ -125,8 +124,12 @@ fun HomeScreen(
             .then(fallbackBg)
             .windowInsetsPadding(WindowInsets.safeDrawing)
     ) {
+        // 2D AuraScene is suppressed when Unity Aura is active — Unity renders the
+        // environment behind this Compose layer. When Aura is inactive the 2D scene
+        // continues to work exactly as before.
         if (auraActive) {
-            AuraScene(theme = auraTheme, modifier = Modifier.fillMaxSize())
+            // Unity surface is visible through the transparent background above.
+            // AuraScene is intentionally not rendered here to avoid covering Unity.
         }
 
         Column(

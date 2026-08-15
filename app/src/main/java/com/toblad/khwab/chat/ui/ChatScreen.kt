@@ -56,7 +56,6 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
 import kotlinx.coroutines.launch
 import com.toblad.khwab.aura.model.TimePhase
-import com.toblad.khwab.aura.ui.AuraScene
 import com.toblad.khwab.background.KnowledgeAcquisitionState
 import com.toblad.khwab.chat.model.ChatMessage
 import com.toblad.khwab.ui.theme.AuraIconProvider
@@ -212,12 +211,10 @@ fun ChatScreen(
                 .fillMaxSize()
                 .padding(padding)
         ) {
-            if (auraActive) {
-                AuraScene(
-                    theme = auraTheme,
-                    modifier = Modifier.fillMaxSize()
-                )
-            }
+            // 2D AuraScene is not rendered: Unity Aura renders the environment
+            // behind this Compose layer via the attached UnityPlayer surface.
+            // The scaffoldBg is already Color.Transparent when auraActive.
+            // (AuraScene preserved in codebase; re-enable here if Unity is removed.)
 
             if (groupedItems.isEmpty() && !uiState.isTyping) {
                 // ── Empty state ─────────────────────────────────────────────

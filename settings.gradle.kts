@@ -17,10 +17,14 @@ plugins {
 }
 
 dependencyResolutionManagement {
-    repositoriesMode.set(RepositoriesMode.FAIL_ON_PROJECT_REPOS)
+    repositoriesMode.set(RepositoriesMode.PREFER_SETTINGS)
     repositories {
         google()
         mavenCentral()
+        // Unity library local JARs (unity-classes.jar in unityLibrary/libs/)
+        flatDir {
+            dirs("../khwab-aura-unity/export/unityLibrary/libs")
+        }
     }
 }
 
@@ -35,5 +39,5 @@ project(":core").projectDir = file("../khwab-core/core")
 
 project(":integration").projectDir = file("../khwab-integration/integration")
 
-include(":aura")
-project(":aura").projectDir = file("../khwab-aura/aura")
+include(":unityLibrary")
+project(":unityLibrary").projectDir = file("../khwab-aura-unity/export/unityLibrary")
