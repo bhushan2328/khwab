@@ -86,6 +86,11 @@ class MainActivity : ComponentActivity() {
         }
     }
 
+    override fun onWindowFocusChanged(hasFocus: Boolean) {
+        super.onWindowFocusChanged(hasFocus)
+        UnityAuraManager.notifyWindowFocus(hasFocus)
+    }
+
     override fun onPause() {
         UnityAuraManager.detachFrom(this)
         UnityAuraManager.pause()

@@ -175,6 +175,22 @@ object UnityAuraManager : IUnityPlayerLifecycleEvents {
     }
 
     /**
+     * Forwards a window-focus event to the Unity native runtime.
+     * Call from the host Activity's [android.app.Activity.onWindowFocusChanged].
+     *
+     * Unity's internal render-loop start gate requires at least one
+     * `windowFocusChanged(true)` call before the first frame is rendered.
+     * When Unity is embedded (not running as its own Activity), the host
+     * Activity must forward this event manually.
+     *
+     * @param hasFocus true when the window gains focus, false when it loses it.
+     */
+    fun notifyWindowFocus(hasFocus: Boolean) {
+        Log.i(TAG, "[DIAG] notifyWindowFocus($hasFocus) — forwarding to UnityPlayer (player=${player != null})")
+        runOnMainThread { player?.windowFocusChanged(hasFocus) }
+    }
+
+    /**
      * Permanently destroys the [UnityPlayerForActivityOrService].
      * Call only when the entire application process is shutting down — never on a
      * single Activity finish().
@@ -273,6 +289,20 @@ object UnityAuraManager : IUnityPlayerLifecycleEvents {
             )
         )
         Log.i(TAG, "[DIAG] attachToInternal() — unityFrame added to contentRoot of ${activity.javaClass.simpleName} at index 0")
+
+        // Request focus on the Unity FrameLayout so the native render loop receives
+        // a Surface with focus.  Without this, UnityPlayerForActivityOrService keeps
+        // its internal focus gate closed and the Unity main loop never ticks —
+        // equivalent to what UnityPlayerActivity.onCreate() does explicitly:
+        //   mUnityPlayer.getFrameLayout().requestFocus()
+        unityFrame.requestFocus()
+        Log.i(TAG, "[DIAG] attachToInternal() — unityFrame.requestFocus() called")
+
+        // Forward a synthetic window-focus-gained event so Unity's native runtime
+        // treats the embedded view as focused.  Required when unity.run-without-focus
+        // is false (the default); also harmless when it is true.
+        p.windowFocusChanged(true)
+        Log.i(TAG, "[DIAG] attachToInternal() — windowFocusChanged(true) forwarded to UnityPlayer")
 
         attachedActivity = activity
     }

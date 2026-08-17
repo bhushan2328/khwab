@@ -51,6 +51,12 @@ class AuraDebugActivity : ComponentActivity() {
         UnityAuraManager.attachTo(this)
     }
 
+    override fun onWindowFocusChanged(hasFocus: Boolean) {
+        super.onWindowFocusChanged(hasFocus)
+        Log.i(tag, "[DIAG] onWindowFocusChanged($hasFocus) — forwarding to UnityPlayer")
+        UnityAuraManager.notifyWindowFocus(hasFocus)
+    }
+
     override fun onPause() {
         Log.i(tag, "[DIAG] onPause() — detaching Unity from AuraDebugActivity")
         UnityAuraManager.detachFrom(this)
