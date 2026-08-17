@@ -35,6 +35,8 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.unit.dp
 import com.toblad.khwab.aura.AuraBridge
+import com.toblad.khwab.aura.UnityAuraBridge
+import com.toblad.khwab.aura.UnityAuraManager
 import com.toblad.khwab.aura.model.AuraState
 import com.toblad.khwab.aura.model.WeatherState
 
@@ -59,6 +61,9 @@ fun AuraDebugConsole(
     // Observe live Aura state — single source of truth, no separate variables.
     val snapshot by AuraBridge.snapshotFlow.collectAsState()
     val theme = snapshot.theme
+
+    // Observe Unity bridge diagnostic state reactively.
+    val diagnostic by UnityAuraBridge.diagnosticFlow.collectAsState()
 
     val colors = MaterialTheme.colorScheme
 
@@ -194,10 +199,69 @@ fun AuraDebugConsole(
                 color = colors.onSurface
             )
 
+            // ── Pipeline Diagnostic ───────────────────────────────────────────
+            DebugSectionHeader("Pipeline Diagnostic")
+
+            // Determine overall health for colour coding.
+            val pipelineOk = UnityAuraManager.isInitialized() &&
+                             UnityAuraManager.isAttached() &&
+                             diagnostic.isUnityReady
+
+            Text(
+                text = buildString {
+                    // ── Android-side state ──────────────────────────────────
+                    appendLine("Unity initialized:       ${boolStr(UnityAuraManager.isInitialized())}")
+                    appendLine("Unity attached:          ${boolStr(UnityAuraManager.isAttached())}")
+                    appendLine("Unity ready:             ${boolStr(diagnostic.isUnityReady)}")
+                    appendLine("Android Aura state:      ${theme.auraState}")
+                    appendLine("Last command sent:       ${diagnostic.lastCommandSent}")
+                    appendLine("Last callback:           ${diagnostic.lastCallbackReceived}")
+                    appendLine("")
+                    // ── Unity-side state (heartbeat) ────────────────────────
+                    appendLine("── Unity C# state ─────────────────")
+                    appendLine("Heartbeat received:      ${boolStr(diagnostic.heartbeatReceived)}")
+                    appendLine("Unity bridge Awake:      ${boolStr(diagnostic.unityAwakeStarted)}")
+                    appendLine("Unity bridge AwakeDone:  ${boolStr(diagnostic.unityAwakeCompleted)}")
+                    appendLine("JNI class loaded:        ${boolStr(diagnostic.jniClassLoaded)}")
+                    appendLine("JNI CallStatic ok:       ${boolStr(diagnostic.jniCallStaticOk)}")
+                    appendLine("Unity Aura state:        ${diagnostic.unityAuraState}")
+                    appendLine("JNI retry count:         ${diagnostic.jniRetryCount}")
+                    appendLine("")
+                    // ── JNI error (critical — shown even if empty) ──────────
+                    if (diagnostic.lastJniError.isNotEmpty()) {
+                        appendLine("── JNI ERROR ──────────────────────")
+                        // Wrap long error messages for readability on small screens.
+                        val err = diagnostic.lastJniError
+                        val colonIdx = err.indexOf(':')
+                        if (colonIdx > 0) {
+                            appendLine("${err.substring(0, colonIdx)}:")
+                            appendLine("  ${err.substring(colonIdx + 1).trim()}")
+                        } else {
+                            appendLine(err)
+                        }
+                    } else {
+                        appendLine("Last JNI error:          none")
+                    }
+                },
+                style = MaterialTheme.typography.bodyMedium.copy(
+                    fontFamily = androidx.compose.ui.text.font.FontFamily.Monospace
+                ),
+                color = when {
+                    !UnityAuraManager.isInitialized()         -> colors.error
+                    diagnostic.lastJniError.isNotEmpty()      -> colors.error
+                    !diagnostic.isUnityReady                  -> colors.error
+                    theme.auraState == AuraState.ACTIVE       -> colors.primary
+                    else                                      -> colors.onSurface
+                }
+            )
+
             Spacer(modifier = Modifier.height(24.dp))
         }
     }
 }
+
+/** Formats a Boolean as a short diagnostic string with checkmark / cross. */
+private fun boolStr(value: Boolean): String = if (value) "YES ✓" else "NO ✗"
 
 @Composable
 private fun DebugSectionHeader(title: String) {

@@ -8,15 +8,19 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.navigationBars
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.windowInsetsPadding
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.KeyboardActions
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.Send
+import androidx.compose.material.icons.filled.Mic
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
@@ -32,6 +36,8 @@ import androidx.compose.ui.draw.scale
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.hapticfeedback.HapticFeedbackType
 import androidx.compose.ui.platform.LocalHapticFeedback
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.unit.dp
 import com.toblad.khwab.ui.theme.ThemeController
@@ -49,14 +55,13 @@ fun ChatInputBar(
 
     val auraActive = ThemeController.currentTheme == ThemeMode.AURA
 
-    // fix #21: scrim starts at slight alpha so text field always has a base
     val barBackground = if (auraActive) {
         Modifier.background(
             Brush.verticalGradient(
                 listOf(
-                    colors.surface.copy(alpha = 0.15f),
-                    colors.surface.copy(alpha = 0.88f),
-                    colors.surface.copy(alpha = 0.97f)
+                    colors.surface.copy(alpha = 0.05f),
+                    colors.surface.copy(alpha = 0.82f),
+                    colors.surface.copy(alpha = 0.96f)
                 )
             )
         )
@@ -66,14 +71,12 @@ fun ChatInputBar(
 
     val canSend = text.isNotBlank()
 
-    // fix #26: distinct disabled state — outline ghost instead of surfaceVariant
     val sendBgColor by animateColorAsState(
-        targetValue = if (canSend) colors.primary else colors.outline.copy(alpha = 0.35f),
-        animationSpec = tween(durationMillis = 220),
+        targetValue = if (canSend) colors.primary else colors.outline.copy(alpha = 0.28f),
+        animationSpec = tween(durationMillis = 200),
         label = "send_bg_color"
     )
 
-    // Bounce scale in when text becomes available
     val sendBtnScale by animateFloatAsState(
         targetValue = if (canSend) 1.0f else 0.88f,
         animationSpec = spring(dampingRatio = 0.55f, stiffness = 400f),
@@ -84,17 +87,49 @@ fun ChatInputBar(
         modifier = Modifier
             .fillMaxWidth()
             .then(barBackground)
+            .windowInsetsPadding(WindowInsets.navigationBars)
             .padding(horizontal = 12.dp, vertical = 10.dp),
         horizontalArrangement = Arrangement.spacedBy(8.dp),
         verticalAlignment = Alignment.Bottom
     ) {
 
-        // ── Text field ────────────────────────────────────────────────────────
+        // ── Microphone button ──────────────────────────────────────────────────
+        Box(
+            modifier = Modifier
+                .size(48.dp)
+                .clip(CircleShape)
+                .background(colors.surfaceVariant.copy(alpha = if (auraActive) 0.65f else 1f)),
+            contentAlignment = Alignment.Center
+        ) {
+            IconButton(
+                onClick = {
+                    haptic.performHapticFeedback(HapticFeedbackType.LongPress)
+                    onMicClick()
+                },
+                modifier = Modifier
+                    .size(48.dp)
+                    .semantics { contentDescription = "Voice input" }
+            ) {
+                Icon(
+                    imageVector = Icons.Default.Mic,
+                    contentDescription = null,
+                    tint = colors.primary,
+                    modifier = Modifier.size(22.dp)
+                )
+            }
+        }
+
+        // ── Text field ─────────────────────────────────────────────────────────
         OutlinedTextField(
             value = text,
             onValueChange = onTextChange,
             modifier = Modifier.weight(1f),
-            placeholder = { Text("Message Khwab…", style = MaterialTheme.typography.bodyMedium) },
+            placeholder = {
+                Text(
+                    "Message Khwab…",
+                    style = MaterialTheme.typography.bodyMedium
+                )
+            },
             maxLines = 5,
             shape = RoundedCornerShape(24.dp),
             keyboardOptions = KeyboardOptions(imeAction = ImeAction.Send),
@@ -106,17 +141,17 @@ fun ChatInputBar(
             }),
             colors = OutlinedTextFieldDefaults.colors(
                 focusedBorderColor   = colors.primary,
-                unfocusedBorderColor = colors.outline.copy(alpha = 0.85f),  // fix #22: stronger border
+                unfocusedBorderColor = colors.outline.copy(alpha = 0.70f),
                 focusedTextColor     = colors.onSurface,
                 unfocusedTextColor   = colors.onSurface,
                 cursorColor          = colors.primary,
-                focusedContainerColor   = colors.surface.copy(alpha = 0.7f),
-                unfocusedContainerColor = colors.surface.copy(alpha = 0.5f)
+                focusedContainerColor   = colors.surface.copy(alpha = 0.85f),
+                unfocusedContainerColor = colors.surface.copy(alpha = 0.60f)
             ),
             textStyle = MaterialTheme.typography.bodyLarge
         )
 
-        // ── Animated circular Send button ─────────────────────────────────────
+        // ── Send button ────────────────────────────────────────────────────────
         Box(
             modifier = Modifier
                 .size(48.dp)
@@ -133,12 +168,15 @@ fun ChatInputBar(
                     }
                 },
                 enabled = canSend,
-                modifier = Modifier.size(48.dp)
+                modifier = Modifier
+                    .size(48.dp)
+                    .semantics { contentDescription = if (canSend) "Send message" else "Send (disabled)" }
             ) {
                 Icon(
                     imageVector = Icons.AutoMirrored.Filled.Send,
-                    contentDescription = "Send",
-                    tint = if (canSend) colors.onPrimary else colors.onSurfaceVariant.copy(alpha = 0.60f), // fix #26
+                    contentDescription = null,
+                    tint = if (canSend) colors.onPrimary
+                           else colors.onSurfaceVariant.copy(alpha = 0.50f),
                     modifier = Modifier.size(22.dp)
                 )
             }

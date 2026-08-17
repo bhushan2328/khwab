@@ -40,11 +40,10 @@ import com.toblad.khwab.ui.theme.ThemeController
 import com.toblad.khwab.ui.theme.ThemeMode
 
 /**
- * Replaces the old three-dot typing indicator.
+ * Animated typing/dreaming indicator shown while Khwab is processing.
  *
- * Shows a small animated "dream" icon — the Khwab star badge floating and
- * pulsing — with a "Dreaming…" label beneath it. This appears while Khwab
- * is thinking before the typewriter answer starts.
+ * Shows a floating AutoAwesome icon with a gentle breathing + float animation,
+ * paired with a "Dreaming…" label. Designed to be lightweight and calm.
  */
 @Composable
 fun TypingIndicator() {
@@ -56,20 +55,20 @@ fun TypingIndicator() {
     )
     val containerColor = when {
         isDaytimeAura -> Color.White.copy(alpha = 0.78f)
-        auraActive    -> colors.surfaceVariant.copy(alpha = 0.82f)
+        auraActive    -> colors.surfaceVariant.copy(alpha = 0.80f)
         else          -> colors.surfaceVariant
     }
-    val iconTint  = if (isDaytimeAura) colors.primary else colors.primary
-    val labelColor = if (isDaytimeAura) Color(0xFF1A1A2E) else colors.onSurfaceVariant
+    val iconTint    = colors.primary
+    val labelColor  = if (isDaytimeAura) Color(0xFF1A1A2E) else colors.onSurfaceVariant
 
     val transition = rememberInfiniteTransition(label = "dream_anim")
 
-    // Gentle vertical float — up and down with a slow ease
+    // Gentle vertical float
     val floatY by transition.animateFloat(
         initialValue = 0f,
-        targetValue  = -8f,
+        targetValue  = -7f,
         animationSpec = infiniteRepeatable(
-            animation = tween(durationMillis = 900, easing = FastOutSlowInEasing),
+            animation = tween(durationMillis = 950, easing = FastOutSlowInEasing),
             repeatMode = RepeatMode.Reverse
         ),
         label = "dream_float"
@@ -86,7 +85,7 @@ fun TypingIndicator() {
         label = "dream_scale"
     )
 
-    // Soft glow rotation for the star rays
+    // Slow star rotation
     val starRotation by transition.animateFloat(
         initialValue = 0f,
         targetValue  = 360f,
@@ -97,7 +96,7 @@ fun TypingIndicator() {
         label = "dream_rotation"
     )
 
-    // Ellipsis dot count cycles 1→2→3 every 500 ms for "Dreaming..." label
+    // Ellipsis dot count
     val dotPhase by transition.animateFloat(
         initialValue = 0f,
         targetValue  = 3f,
@@ -122,10 +121,10 @@ fun TypingIndicator() {
                 .padding(start = 4.dp, top = 4.dp, bottom = 4.dp, end = 12.dp),
             shape = RoundedCornerShape(20.dp),
             colors = CardDefaults.cardColors(containerColor = containerColor),
-            elevation = CardDefaults.cardElevation(defaultElevation = 6.dp)
+            elevation = CardDefaults.cardElevation(defaultElevation = 0.dp)
         ) {
             Row(
-                modifier = Modifier.padding(horizontal = 18.dp, vertical = 14.dp),
+                modifier = Modifier.padding(horizontal = 16.dp, vertical = 12.dp),
                 horizontalArrangement = Arrangement.spacedBy(10.dp),
                 verticalAlignment = Alignment.CenterVertically
             ) {
@@ -133,21 +132,21 @@ fun TypingIndicator() {
                 Box(
                     contentAlignment = Alignment.Center,
                     modifier = Modifier
-                        .size(36.dp)
+                        .size(34.dp)
                         .graphicsLayer { translationY = floatY }
                         .scale(breathScale)
                 ) {
-                    // Outer glow ring — subtle circle behind the icon
+                    // Outer glow ring
                     Box(
                         modifier = Modifier
-                            .size(36.dp)
+                            .size(34.dp)
                             .graphicsLayer { rotationZ = starRotation }
                     ) {
                         Icon(
                             imageVector = Icons.Default.AutoAwesome,
                             contentDescription = null,
-                            tint = iconTint.copy(alpha = 0.18f),
-                            modifier = Modifier.size(36.dp)
+                            tint = iconTint.copy(alpha = 0.16f),
+                            modifier = Modifier.size(34.dp)
                         )
                     }
                     // Main icon
@@ -155,7 +154,7 @@ fun TypingIndicator() {
                         imageVector = Icons.Default.AutoAwesome,
                         contentDescription = null,
                         tint = iconTint,
-                        modifier = Modifier.size(22.dp)
+                        modifier = Modifier.size(20.dp)
                     )
                 }
 
@@ -165,7 +164,7 @@ fun TypingIndicator() {
                         color = colors.primary,
                         fontSize = 11.sp,
                         fontWeight = FontWeight.SemiBold,
-                        letterSpacing = 0.5.sp
+                        letterSpacing = 0.4.sp
                     )
                     Text(
                         text = "Dreaming$dots",

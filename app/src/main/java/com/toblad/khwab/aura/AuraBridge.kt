@@ -19,6 +19,7 @@ import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.launch
 
 private const val TAG = "AuraBridge"
+private const val DIAG = "[AURA-ANDROID]"
 
 /**
  * Single combined snapshot of Aura's live state, exposed as a
@@ -73,6 +74,14 @@ object AuraBridge {
      */
     val snapshotFlow: StateFlow<AuraSnapshot> = _snapshotFlow.asStateFlow()
 
+    /**
+     * Live [AuraState] flow — emits every time the lifecycle state changes.
+     * Compose UI should collect this (or observe [ThemeController.currentAuraTheme].auraState)
+     * rather than polling [getState()].
+     */
+    private val _auraStateFlow = MutableStateFlow(AuraState.OFF)
+    val auraStateFlow: StateFlow<AuraState> = _auraStateFlow.asStateFlow()
+
     // ── Public API ────────────────────────────────────────────────────────────
 
     /**
@@ -100,14 +109,15 @@ object AuraBridge {
         // Restore activation state: if Aura was left enabled, re-activate.
         // Unity may not be ready yet — UnityAuraBridge queues the command.
         if (saved.enabled) {
-            _auraState = AuraState.STARTING
+            setAuraState(AuraState.STARTING)
             ThemeController.enableAura()
             startBackgroundSync()
+            Log.i(TAG, "$DIAG initialize: restored enabled=true → state=STARTING, queuing ActivateAura")
             UnityAuraBridge.activate()   // queued until Unity is ready
-            Log.d(TAG, "initialize: restored enabled=true, ActivateAura queued")
         } else {
-            _auraState = AuraState.OFF
+            setAuraState(AuraState.OFF)
             ThemeController.disableAura()
+            Log.i(TAG, "$DIAG initialize: saved enabled=false → state=OFF")
         }
 
         pushSnapshot()
@@ -123,28 +133,27 @@ object AuraBridge {
      */
     fun activate() {
         _config = _config.copy(enabled = true)
-        _auraState = AuraState.STARTING
+        setAuraState(AuraState.STARTING)
         configStore?.save(_config)
         ThemeController.enableAura()
         startBackgroundSync()
         pushSnapshot()
+        Log.i(TAG, "$DIAG activate() → state=STARTING, dispatching ActivateAura to Unity")
         UnityAuraBridge.activate()
-        Log.d(TAG, "activate() called")
     }
 
     /**
      * Deactivates Unity Aura:
-     * - Marks Aura as OFF
-     * - Disables ThemeController
+     * - Marks Aura as STOPPING (keeps ThemeMode.AURA so Unity can fade out over the transparent bg)
      * - Persists enabled=false
      * - Stops background sync
      * - Sends DeactivateAura to Unity
+     * - ThemeController.disableAura() is called later in [onUnityAuraDeactivated]
      */
     fun deactivate() {
         _config = _config.copy(enabled = false)
-        _auraState = AuraState.OFF
         configStore?.save(_config)
-        ThemeController.disableAura()
+        setAuraState(AuraState.STOPPING)
         stopBackgroundSync()
         pushSnapshot()
         UnityAuraBridge.deactivate()
@@ -160,6 +169,53 @@ object AuraBridge {
         _auraState == AuraState.ACTIVE || _auraState == AuraState.STARTING
 
     fun getState(): AuraState = _auraState
+
+    /**
+     * Called by [UnityAuraBridge] when Unity's [AuraLifecycleController] signals
+     * that the fade-in is complete.  Advances Android state from STARTING → ACTIVE.
+     *
+     * Must be called on the Android main thread (guaranteed by [UnityAuraBridge]).
+     */
+    fun onUnityAuraActivated() {
+        Log.i(TAG, "$DIAG onUnityAuraActivated() received from Unity — current state=$_auraState")
+        if (_auraState != AuraState.STARTING) {
+            Log.w(TAG, "$DIAG onUnityAuraActivated() — unexpected state $_auraState, ignoring")
+            return
+        }
+        setAuraState(AuraState.ACTIVE)
+        pushSnapshot()
+        Log.i(TAG, "$DIAG onUnityAuraActivated() → state=ACTIVE ✓")
+    }
+
+    /**
+     * Called by [UnityAuraBridge] when Unity's [AuraLifecycleController] signals
+     * that the fade-out is complete.  Advances Android state from STOPPING → OFF and
+     * restores the normal Khwab theme.
+     *
+     * Must be called on the Android main thread (guaranteed by [UnityAuraBridge]).
+     */
+    fun onUnityAuraDeactivated() {
+        if (_auraState != AuraState.STOPPING) {
+            Log.d(TAG, "onUnityAuraDeactivated() — unexpected state $_auraState, ignoring")
+            return
+        }
+        setAuraState(AuraState.OFF)
+        ThemeController.disableAura()
+        pushSnapshot()
+        Log.d(TAG, "onUnityAuraDeactivated() → OFF, theme restored")
+    }
+
+    /**
+     * Marks Aura as ERROR.  Called when Unity cannot initialise or reports a
+     * critical failure.  Restores the normal Khwab theme so the UI does not
+     * remain permanently transparent.
+     */
+    fun onUnityAuraError(reason: String) {
+        Log.e(TAG, "onUnityAuraError: $reason")
+        setAuraState(AuraState.ERROR)
+        ThemeController.disableAura()
+        pushSnapshot()
+    }
 
     /** Returns the current Aura theme snapshot. */
     fun getTheme(): AuraTheme = _snapshotFlow.value.theme
@@ -229,6 +285,11 @@ object AuraBridge {
     }
 
     // ── Internal ──────────────────────────────────────────────────────────────
+
+    private fun setAuraState(state: AuraState) {
+        _auraState = state
+        _auraStateFlow.value = state
+    }
 
     private fun startBackgroundSync() {
         environmentSync?.hydrateFromCache()

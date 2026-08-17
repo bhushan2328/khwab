@@ -60,7 +60,7 @@ import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
 
-/** How many milliseconds between each character during typewriter reveal. */
+/** Milliseconds between each character during typewriter reveal. */
 private const val TYPEWRITER_CHAR_DELAY_MS = 18L
 
 @Composable
@@ -82,8 +82,8 @@ fun ChatBubble(
     if (auraActive) {
         val weatherTint = weatherBubbleTint(auraTheme.weatherState)
         val timeTint = timeBubbleTint(auraTheme.timePhase)
-        userBubbleColor = lerp(colors.primary, weatherTint, 0.20f).copy(alpha = 0.92f)
-        assistantBubbleColor = lerp(colors.surfaceVariant, timeTint, 0.15f).copy(alpha = 0.88f)
+        userBubbleColor = lerp(colors.primary, weatherTint, 0.18f).copy(alpha = 0.90f)
+        assistantBubbleColor = lerp(colors.surfaceVariant, timeTint, 0.15f).copy(alpha = 0.84f)
         userTextColor = colors.onPrimary
         assistantTextColor = colors.onSurfaceVariant
     } else {
@@ -97,9 +97,6 @@ fun ChatBubble(
         .format(Date(message.timestamp))
 
     // ── Typewriter state ──────────────────────────────────────────────────────
-    // Only Khwab messages flagged as isNew get the animation.
-    // displayedText grows from "" to message.text one character at a time.
-    // typingDone goes true once all characters are revealed.
     var displayedText by remember(message.id) {
         mutableStateOf(if (message.isNew && !isUser) "" else message.text)
     }
@@ -107,7 +104,6 @@ fun ChatBubble(
 
     LaunchedEffect(message.id, message.isNew) {
         if (!isUser && message.isNew && message.state != MessageState.STREAMING) {
-            // Type out each character with a small delay
             val full = message.text
             for (i in 1..full.length) {
                 displayedText = full.substring(0, i)
@@ -118,34 +114,34 @@ fun ChatBubble(
         }
     }
 
-    // Slide-in on first composition: user from right, assistant from left
+    // Slide-in: user from right, assistant from left
     AnimatedVisibility(
         visible = true,
-        enter = fadeIn(tween(220)) + slideInHorizontally(
-            animationSpec = tween(260),
-            initialOffsetX = { if (isUser) it / 4 else -it / 4 }
+        enter = fadeIn(tween(200)) + slideInHorizontally(
+            animationSpec = tween(240),
+            initialOffsetX = { if (isUser) it / 5 else -it / 5 }
         )
     ) {
         Row(
             modifier = Modifier
                 .fillMaxWidth()
-                .padding(vertical = 4.dp),
+                .padding(vertical = 3.dp),
             horizontalArrangement = if (isUser) Arrangement.End else Arrangement.Start
         ) {
             if (isUser) {
                 // ── User bubble ───────────────────────────────────────────────
                 Card(
                     modifier = Modifier
-                        .wrapContentWidth()
-                        .widthIn(min = 72.dp, max = 480.dp)
-                        .fillMaxWidth(0.78f),
+                        .widthIn(min = 64.dp, max = 320.dp)
+                        .wrapContentWidth(),
                     shape = RoundedCornerShape(
                         topStart = 20.dp, topEnd = 20.dp,
-                        bottomStart = 20.dp, bottomEnd = 6.dp
+                        bottomStart = 20.dp, bottomEnd = 5.dp
                     ),
-                    colors = CardDefaults.cardColors(containerColor = userBubbleColor)
+                    colors = CardDefaults.cardColors(containerColor = userBubbleColor),
+                    elevation = CardDefaults.cardElevation(defaultElevation = 0.dp)
                 ) {
-                    Box(modifier = Modifier.padding(horizontal = 16.dp, vertical = 12.dp)) {
+                    Box(modifier = Modifier.padding(horizontal = 14.dp, vertical = 10.dp)) {
                         Column {
                             Text(
                                 text = buildString {
@@ -164,14 +160,14 @@ fun ChatBubble(
                             ) {
                                 Text(
                                     text = timeString,
-                                    color = userTextColor.copy(alpha = 0.55f),
+                                    color = userTextColor.copy(alpha = 0.50f),
                                     fontSize = 10.sp
                                 )
                                 val (icon, tint) = when (message.status) {
                                     MessageStatus.SENDING -> Icons.Default.Schedule to
-                                            userTextColor.copy(alpha = 0.55f)
+                                            userTextColor.copy(alpha = 0.50f)
                                     MessageStatus.SENT -> Icons.Default.Check to
-                                            userTextColor.copy(alpha = 0.80f)
+                                            userTextColor.copy(alpha = 0.75f)
                                     MessageStatus.ERROR -> Icons.Default.ErrorOutline to colors.error
                                 }
                                 Icon(
@@ -188,8 +184,8 @@ fun ChatBubble(
                 // ── Khwab (assistant) bubble ──────────────────────────────────
                 Column(
                     modifier = Modifier
-                        .widthIn(max = 520.dp)
-                        .fillMaxWidth(0.88f)
+                        .widthIn(max = 480.dp)
+                        .fillMaxWidth(0.86f)
                 ) {
                     // Khwab label row
                     Row(
@@ -199,7 +195,7 @@ fun ChatBubble(
                     ) {
                         Box(
                             modifier = Modifier
-                                .size(22.dp)
+                                .size(20.dp)
                                 .clip(RoundedCornerShape(6.dp))
                                 .background(
                                     if (auraActive)
@@ -213,7 +209,7 @@ fun ChatBubble(
                                 imageVector = Icons.Default.AutoAwesome,
                                 contentDescription = null,
                                 tint = colors.primary,
-                                modifier = Modifier.size(13.dp)
+                                modifier = Modifier.size(12.dp)
                             )
                         }
                         Text(
@@ -221,22 +217,23 @@ fun ChatBubble(
                             color = colors.primary,
                             fontSize = 11.sp,
                             fontWeight = FontWeight.SemiBold,
-                            letterSpacing = 0.5.sp
+                            letterSpacing = 0.4.sp
                         )
                     }
 
                     Card(
                         modifier = Modifier
                             .fillMaxWidth()
-                            .animateContentSize(animationSpec = tween(durationMillis = 200)),
+                            .animateContentSize(animationSpec = tween(durationMillis = 180)),
                         shape = RoundedCornerShape(
-                            topStart = 6.dp, topEnd = 20.dp,
+                            topStart = 5.dp, topEnd = 20.dp,
                             bottomStart = 20.dp, bottomEnd = 20.dp
                         ),
-                        colors = CardDefaults.cardColors(containerColor = assistantBubbleColor)
+                        colors = CardDefaults.cardColors(containerColor = assistantBubbleColor),
+                        elevation = CardDefaults.cardElevation(defaultElevation = 0.dp)
                     ) {
                         Column(
-                            modifier = Modifier.padding(horizontal = 16.dp, vertical = 14.dp),
+                            modifier = Modifier.padding(horizontal = 14.dp, vertical = 12.dp),
                             verticalArrangement = Arrangement.spacedBy(0.dp)
                         ) {
                             when {
@@ -254,7 +251,7 @@ fun ChatBubble(
                                         lineHeight = 23.sp
                                     )
                                 }
-                                // Typewriter in progress — show what's revealed so far + cursor
+                                // Typewriter in progress
                                 message.isNew && !typingDone -> {
                                     Text(
                                         text = buildAnnotatedString {
@@ -278,10 +275,10 @@ fun ChatBubble(
                                 }
                             }
 
-                            Spacer(modifier = Modifier.height(6.dp))
+                            Spacer(modifier = Modifier.height(5.dp))
                             Text(
                                 text = timeString,
-                                color = assistantTextColor.copy(alpha = 0.45f),
+                                color = assistantTextColor.copy(alpha = 0.40f),
                                 fontSize = 10.sp
                             )
                         }

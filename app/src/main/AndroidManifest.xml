@@ -59,12 +59,12 @@
         </activity>
 
         <!--
-            Override Unity GameActivity: keep it non-exported so it does not
+            Override Unity UnityPlayerActivity: keep it non-exported so it does not
             appear as a launchable entry point. Unity still registers it via
             manifest merge; we just prevent it from being exported.
         -->
         <activity
-            android:name="com.unity3d.player.GameActivity"
+            android:name="com.unity3d.player.UnityPlayerActivity"
             android:exported="false"
             tools:replace="android:exported" />
 

@@ -6,6 +6,7 @@ import android.os.Looper
 import android.util.Log
 import android.widget.FrameLayout
 import com.unity3d.player.IUnityPlayerLifecycleEvents
+import com.unity3d.player.UnityPlayer
 import com.unity3d.player.UnityPlayerForActivityOrService
 
 /**
@@ -88,8 +89,14 @@ object UnityAuraManager : IUnityPlayerLifecycleEvents {
             // UnityPlayerForActivityOrService constructor boots the Unity runtime.
             // AuraAndroidBridge.Awake() will call back via UnityAuraBridgeCallback
             // once the scripting runtime is ready to receive UnitySendMessage.
+            Log.i(TAG, "[DIAG] initialize() — constructing UnityPlayerForActivityOrService" +
+                       " with Activity=${activity.javaClass.simpleName}" +
+                       " (thread=${Thread.currentThread().name})")
+            // Set currentActivity before construction so Unity's JNI bridge has the
+            // correct host-app classloader from the first moment of native init.
+            UnityPlayer.currentActivity = activity
             player = UnityPlayerForActivityOrService(activity, this@UnityAuraManager)
-            Log.d(TAG, "UnityPlayerForActivityOrService created — waiting for Unity-ready callback")
+            Log.i(TAG, "[DIAG] UnityPlayerForActivityOrService constructed — waiting for Unity-ready callback")
         }
     }
 
@@ -103,6 +110,8 @@ object UnityAuraManager : IUnityPlayerLifecycleEvents {
      * Call from Activity.onResume() or Activity.onStart().
      */
     fun attachTo(activity: Activity) {
+        Log.i(TAG, "[DIAG] attachTo() requested — Activity=${activity.javaClass.simpleName}" +
+                   ", isInitialized=${player != null}, currentAttached=${attachedActivity?.javaClass?.simpleName ?: "none"}")
         runOnMainThread {
             if (player == null) {
                 initialize(activity)
@@ -122,8 +131,13 @@ object UnityAuraManager : IUnityPlayerLifecycleEvents {
      * no other Activity will immediately pick it up.
      */
     fun detachFrom(activity: Activity) {
+        Log.i(TAG, "[DIAG] detachFrom() requested — Activity=${activity.javaClass.simpleName}" +
+                   ", currentAttached=${attachedActivity?.javaClass?.simpleName ?: "none"}")
         runOnMainThread {
-            if (attachedActivity !== activity) return@runOnMainThread
+            if (attachedActivity !== activity) {
+                Log.i(TAG, "[DIAG] detachFrom() — skipped (not attached to ${activity.javaClass.simpleName})")
+                return@runOnMainThread
+            }
             detachInternal(activity)
         }
     }
@@ -204,13 +218,33 @@ object UnityAuraManager : IUnityPlayerLifecycleEvents {
      * Core attach logic — must be called on the main thread with [player] non-null.
      */
     private fun attachToInternal(activity: Activity) {
-        val p = player ?: return
+        Log.i(TAG, "[DIAG] attachToInternal() — Activity=${activity.javaClass.simpleName}")
+        val p = player ?: run {
+            Log.e(TAG, "[DIAG] attachToInternal() — player is null, cannot attach")
+            return
+        }
 
         // Already attached to this exact Activity — nothing to do.
-        if (attachedActivity === activity) return
+        if (attachedActivity === activity) {
+            Log.i(TAG, "[DIAG] attachToInternal() — already attached to ${activity.javaClass.simpleName}, skipping")
+            return
+        }
 
         // Detach from a previous Activity before attaching to the new one.
-        attachedActivity?.let { detachInternal(it) }
+        attachedActivity?.let {
+            Log.i(TAG, "[DIAG] attachToInternal() — detaching from previous ${it.javaClass.simpleName} before attaching to ${activity.javaClass.simpleName}")
+            detachInternal(it)
+        }
+
+        // Keep Unity's currentActivity pointing at the foreground Activity so that
+        // Unity's internal AndroidJavaClass class-loader resolution (which calls
+        // currentActivity.getClassLoader()) uses the host app's class loader and
+        // can find com.toblad.khwab.* classes at JNI call-back time.
+        // Without this, Unity's native thread may have a stale or null currentActivity
+        // and AndroidJavaClass("com.toblad.khwab.aura.UnityAuraBridgeCallback") throws
+        // a ClassNotFoundException that is silently swallowed in NotifyAndroidReady().
+        UnityPlayer.currentActivity = activity
+        Log.i(TAG, "[DIAG] attachToInternal() — UnityPlayer.currentActivity set to ${activity.javaClass.simpleName}")
 
         // Unity's own FrameLayout is the correct root to embed.
         // It contains the rendering SurfaceView plus any splash/overlay views Unity needs.
@@ -221,6 +255,7 @@ object UnityAuraManager : IUnityPlayerLifecycleEvents {
 
         // Guard: already in this container (e.g. re-entrant call).
         if (unityFrame.parent === contentRoot) {
+            Log.i(TAG, "[DIAG] attachToInternal() — unityFrame already in contentRoot of ${activity.javaClass.simpleName}")
             attachedActivity = activity
             return
         }
@@ -237,6 +272,7 @@ object UnityAuraManager : IUnityPlayerLifecycleEvents {
                 FrameLayout.LayoutParams.MATCH_PARENT
             )
         )
+        Log.i(TAG, "[DIAG] attachToInternal() — unityFrame added to contentRoot of ${activity.javaClass.simpleName} at index 0")
 
         attachedActivity = activity
     }
@@ -245,12 +281,16 @@ object UnityAuraManager : IUnityPlayerLifecycleEvents {
      * Core detach logic — must be called on the main thread.
      */
     private fun detachInternal(activity: Activity) {
+        Log.i(TAG, "[DIAG] detachInternal() — Activity=${activity.javaClass.simpleName}")
         val p = player
         val unityFrame: FrameLayout? = p?.frameLayout
 
         val contentRoot = activity.findViewById<FrameLayout>(android.R.id.content)
         if (unityFrame != null && unityFrame.parent === contentRoot) {
             contentRoot.removeView(unityFrame)
+            Log.i(TAG, "[DIAG] detachInternal() — unityFrame removed from contentRoot of ${activity.javaClass.simpleName}")
+        } else {
+            Log.i(TAG, "[DIAG] detachInternal() — unityFrame not in contentRoot of ${activity.javaClass.simpleName} (parent=${unityFrame?.parent})")
         }
 
         attachedActivity = null

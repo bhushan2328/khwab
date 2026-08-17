@@ -19,6 +19,7 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
@@ -30,11 +31,11 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.AutoAwesome
 import androidx.compose.material.icons.filled.KeyboardArrowDown
-import androidx.compose.material3.FloatingActionButton
 import androidx.compose.material3.Icon
 import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Scaffold
+import androidx.compose.material3.SmallFloatingActionButton
 import androidx.compose.material3.SuggestionChip
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
@@ -96,7 +97,6 @@ fun ChatScreen(
     val auraActive = ThemeController.currentTheme == ThemeMode.AURA
     val auraTheme = ThemeController.currentAuraTheme
 
-    // fix #17, #18: daytime Aura awareness for chips and learning bar
     val isDaytimeAura = auraActive && auraTheme.timePhase in listOf(
         TimePhase.SUNRISE, TimePhase.MORNING, TimePhase.NOON, TimePhase.AFTERNOON
     )
@@ -110,6 +110,7 @@ fun ChatScreen(
 
     Scaffold(
         containerColor = scaffoldBg,
+        contentWindowInsets = WindowInsets(0),
         topBar = {
             Column {
                 ChatTopBar(
@@ -117,18 +118,15 @@ fun ChatScreen(
                     onClearChat = viewModel::clearChat
                 )
 
-                // ── Knowledge acquisition progress bar ─────────────────────────
-                // Replaces the old plain-text "Learning: …" strip with a visible
-                // indeterminate LinearProgressIndicator + label row.
+                // ── Knowledge acquisition progress bar ────────────────────────
                 AnimatedVisibility(
                     visible = acquisitionState is KnowledgeAcquisitionState.Acquiring,
                     enter = fadeIn(),
                     exit = fadeOut()
                 ) {
                     val query = (acquisitionState as? KnowledgeAcquisitionState.Acquiring)?.query
-                    // fix #18: readable in daytime Aura
-                    val learnBg = if (isDaytimeAura) Color.Black.copy(alpha = 0.18f)
-                                  else colors.primaryContainer.copy(alpha = 0.25f)
+                    val learnBg = if (isDaytimeAura) Color.Black.copy(alpha = 0.16f)
+                                  else colors.primaryContainer.copy(alpha = 0.22f)
                     val learnTextColor = if (isDaytimeAura) Color.White else colors.onSurfaceVariant
                     Column(
                         modifier = Modifier
@@ -153,42 +151,49 @@ fun ChatScreen(
                         LinearProgressIndicator(
                             modifier = Modifier.fillMaxWidth(),
                             color = colors.primary,
-                            trackColor = colors.primaryContainer.copy(alpha = 0.30f)
+                            trackColor = colors.primaryContainer.copy(alpha = 0.25f)
                         )
                     }
                 }
 
-                // ── Aura context strip ─────────────────────────────────────────
+                // ── Aura context strip ────────────────────────────────────────
                 if (auraActive) {
                     val contextIcon = AuraIconProvider.micIconFor(
                         weather = auraTheme.weatherState,
                         timePhase = auraTheme.timePhase
                     )
+                    val stripBg = if (isDaytimeAura) Color.White.copy(alpha = 0.30f)
+                                  else colors.surface.copy(alpha = 0.45f)
+                    val stripText = if (isDaytimeAura) Color(0xFF1A1A2E).copy(alpha = 0.80f)
+                                   else colors.onSurfaceVariant.copy(alpha = 0.80f)
                     Row(
                         modifier = Modifier
                             .fillMaxWidth()
-                            .padding(horizontal = 16.dp, vertical = 2.dp),
+                            .background(stripBg)
+                            .padding(horizontal = 16.dp, vertical = 5.dp),
                         verticalAlignment = Alignment.CenterVertically,
                         horizontalArrangement = Arrangement.spacedBy(6.dp)
                     ) {
                         Icon(
                             imageVector = contextIcon,
                             contentDescription = null,
-                            tint = colors.primary,
-                            modifier = Modifier.padding(end = 2.dp)
+                            tint = if (isDaytimeAura) colors.primary.copy(alpha = 0.85f)
+                                   else colors.primary,
+                            modifier = Modifier.size(14.dp)
                         )
                         Text(
                             text = buildString {
                                 append(auraTheme.weatherState.name
                                     .lowercase().replaceFirstChar { it.uppercase() })
-                                append("  •  ")
+                                append("  ·  ")
                                 append(auraTheme.timePhase.name
                                     .replace("_", " ")
                                     .lowercase().replaceFirstChar { it.uppercase() })
                             },
-                            color = colors.onSurfaceVariant,
-                            fontSize = 12.sp,
-                            fontWeight = FontWeight.Medium
+                            color = stripText,
+                            fontSize = 11.sp,
+                            fontWeight = FontWeight.Medium,
+                            letterSpacing = 0.3.sp
                         )
                     }
                 }
@@ -200,7 +205,7 @@ fun ChatScreen(
                 onTextChange = viewModel::onInputChanged,
                 onSendClick = viewModel::sendMessage,
                 onMicClick = {
-                    // Sherpa integration comes here
+                    // Sherpa voice integration entry point
                 }
             )
         }
@@ -211,22 +216,21 @@ fun ChatScreen(
                 .fillMaxSize()
                 .padding(padding)
         ) {
-            // 2D AuraScene is not rendered: Unity Aura renders the environment
-            // behind this Compose layer via the attached UnityPlayer surface.
-            // The scaffoldBg is already Color.Transparent when auraActive.
-            // (AuraScene preserved in codebase; re-enable here if Unity is removed.)
-
             if (groupedItems.isEmpty() && !uiState.isTyping) {
-                // ── Empty state ─────────────────────────────────────────────
-                ChatEmptyState(onSuggestionClick = viewModel::onInputChanged)
+                // ── Empty state ───────────────────────────────────────────────
+                ChatEmptyState(
+                    auraActive = auraActive,
+                    isDaytimeAura = isDaytimeAura,
+                    onSuggestionClick = viewModel::onInputChanged
+                )
             } else {
                 LazyColumn(
                     modifier = Modifier.fillMaxSize(),
                     state = listState,
-                    verticalArrangement = Arrangement.spacedBy(8.dp),
+                    verticalArrangement = Arrangement.spacedBy(6.dp),
                     contentPadding = PaddingValues(
                         horizontal = 12.dp,
-                        vertical = 12.dp
+                        vertical = 14.dp
                     )
                 ) {
                     groupedItems.forEach { item ->
@@ -253,30 +257,30 @@ fun ChatScreen(
                 }
             }
 
-            // ── Scroll-to-bottom FAB — always a direct child of the outer Box ─
+            // ── Scroll-to-bottom FAB ──────────────────────────────────────────
             AnimatedVisibility(
                 visible = showScrollFab,
-                enter = scaleIn(tween(200)) + fadeIn(tween(200)),
-                exit  = scaleOut(tween(160)) + fadeOut(tween(160)),
+                enter = scaleIn(tween(180)) + fadeIn(tween(180)),
+                exit  = scaleOut(tween(140)) + fadeOut(tween(140)),
                 modifier = Modifier
                     .align(Alignment.BottomEnd)
-                    .padding(bottom = 12.dp, end = 16.dp)
+                    .padding(bottom = 10.dp, end = 14.dp)
             ) {
-                FloatingActionButton(
+                SmallFloatingActionButton(
                     onClick = {
                         coroutineScope.launch {
                             val target = listState.layoutInfo.totalItemsCount - 1
                             if (target >= 0) listState.animateScrollToItem(target)
                         }
                     },
-                    containerColor = MaterialTheme.colorScheme.primary,
-                    contentColor   = MaterialTheme.colorScheme.onPrimary,
-                    modifier = Modifier.size(42.dp)
+                    containerColor = colors.surfaceVariant.copy(alpha = if (auraActive) 0.80f else 1f),
+                    contentColor   = colors.onSurfaceVariant,
+                    modifier = Modifier.size(40.dp)
                 ) {
                     Icon(
                         imageVector = Icons.Default.KeyboardArrowDown,
                         contentDescription = "Scroll to bottom",
-                        modifier = Modifier.size(22.dp)
+                        modifier = Modifier.size(20.dp)
                     )
                 }
             }
@@ -289,16 +293,19 @@ fun ChatScreen(
 @Composable
 private fun DateSeparatorChip(label: String) {
     val colors = MaterialTheme.colorScheme
-    // fix #17: Aura daytime chip contrast
     val auraActive = ThemeController.currentTheme == ThemeMode.AURA
     val timePhase = ThemeController.currentAuraTheme.timePhase
     val isDaytime = auraActive && timePhase in listOf(
         TimePhase.SUNRISE, TimePhase.MORNING, TimePhase.NOON, TimePhase.AFTERNOON
     )
     val chipColor = when {
-        isDaytime  -> Color.White.copy(alpha = 0.75f)
-        auraActive -> colors.surfaceVariant.copy(alpha = 0.85f)
-        else       -> colors.surfaceVariant.copy(alpha = 0.70f)
+        isDaytime  -> Color.White.copy(alpha = 0.68f)
+        auraActive -> colors.surfaceVariant.copy(alpha = 0.82f)
+        else       -> colors.surfaceVariant.copy(alpha = 0.65f)
+    }
+    val textColor = when {
+        isDaytime  -> Color(0xFF1A1A2E).copy(alpha = 0.75f)
+        else       -> colors.onSurfaceVariant.copy(alpha = 0.80f)
     }
     Box(
         modifier = Modifier
@@ -312,9 +319,9 @@ private fun DateSeparatorChip(label: String) {
         ) {
             Text(
                 text = label,
-                modifier = Modifier.padding(horizontal = 16.dp, vertical = 4.dp),
-                color = colors.onSurfaceVariant,
-                fontSize = 12.sp,
+                modifier = Modifier.padding(horizontal = 14.dp, vertical = 4.dp),
+                color = textColor,
+                fontSize = 11.sp,
                 fontWeight = FontWeight.SemiBold,
                 textAlign = TextAlign.Center,
                 style = MaterialTheme.typography.labelSmall
@@ -378,20 +385,39 @@ private val suggestionChips = listOf(
 )
 
 @Composable
-private fun ChatEmptyState(onSuggestionClick: (String) -> Unit = {}) {
+private fun ChatEmptyState(
+    auraActive: Boolean = false,
+    isDaytimeAura: Boolean = false,
+    onSuggestionClick: (String) -> Unit = {}
+) {
     val colors = MaterialTheme.colorScheme
 
     // Breathing animation for the icon badge
     val breathTransition = rememberInfiniteTransition(label = "empty_breath")
     val breathScale by breathTransition.animateFloat(
         initialValue = 1.0f,
-        targetValue  = 1.06f,
+        targetValue  = 1.05f,
         animationSpec = infiniteRepeatable(
-            animation = tween(durationMillis = 2000, easing = FastOutSlowInEasing),
+            animation = tween(durationMillis = 2200, easing = FastOutSlowInEasing),
             repeatMode = RepeatMode.Reverse
         ),
         label = "badge_scale"
     )
+
+    val titleColor = when {
+        isDaytimeAura -> Color(0xFF1A1A2E)
+        auraActive    -> colors.onSurface
+        else          -> colors.onSurface
+    }
+    val bodyColor = when {
+        isDaytimeAura -> Color(0xFF3D3D5C).copy(alpha = 0.85f)
+        else          -> colors.onSurfaceVariant
+    }
+    val badgeColor = when {
+        isDaytimeAura -> Color.White.copy(alpha = 0.65f)
+        auraActive    -> colors.primaryContainer.copy(alpha = 0.70f)
+        else          -> colors.primaryContainer
+    }
 
     AnimatedVisibility(
         visible = true,
@@ -409,12 +435,12 @@ private fun ChatEmptyState(onSuggestionClick: (String) -> Unit = {}) {
                 verticalArrangement = Arrangement.spacedBy(12.dp),
                 modifier = Modifier.padding(horizontal = 40.dp)
             ) {
-                // Breathing icon badge - fix #16: solid container + subtle border
+                // Breathing icon badge
                 Surface(
                     shape = RoundedCornerShape(20.dp),
-                    color = colors.primaryContainer,
+                    color = badgeColor,
                     border = androidx.compose.foundation.BorderStroke(
-                        1.dp, colors.primary.copy(alpha = 0.30f)
+                        1.dp, colors.primary.copy(alpha = 0.22f)
                     ),
                     modifier = Modifier.scale(breathScale)
                 ) {
@@ -433,14 +459,14 @@ private fun ChatEmptyState(onSuggestionClick: (String) -> Unit = {}) {
                 Text(
                     text = "Start a conversation",
                     style = MaterialTheme.typography.titleMedium,
-                    color = colors.onSurface,
+                    color = titleColor,
                     textAlign = TextAlign.Center
                 )
 
                 Text(
                     text = "Ask me anything — I'm your intelligent voice companion.",
                     style = MaterialTheme.typography.bodySmall,
-                    color = colors.onSurfaceVariant,
+                    color = bodyColor,
                     textAlign = TextAlign.Center
                 )
 

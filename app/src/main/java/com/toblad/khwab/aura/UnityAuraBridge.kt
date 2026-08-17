@@ -7,6 +7,40 @@ import com.toblad.khwab.aura.model.WeatherState
 import com.unity3d.player.UnityPlayer
 import java.util.Locale
 import java.util.concurrent.CopyOnWriteArrayList
+import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.asStateFlow
+
+/**
+ * Snapshot of the Android↔Unity bridge diagnostic state.
+ * Emitted by [UnityAuraBridge.diagnosticFlow] whenever a key pipeline event occurs.
+ * Consumed by [AuraDebugConsole] to show live pipeline status without polling.
+ *
+ * Fields added in v2: full Unity-side diagnostic state surfaced via the heartbeat
+ * callback so the on-device debug console can display the exact JNI failure without ADB.
+ */
+data class AuraBridgeDiagnostic(
+    val isUnityReady: Boolean = false,
+    val lastCommandSent: String = "none",
+    val lastCallbackReceived: String = "none",
+    // ── Unity-side diagnostic fields (populated via onUnityHeartbeat) ─────────
+    /** True once AuraAndroidBridge.Awake() has started on the Unity thread. */
+    val unityAwakeStarted: Boolean = false,
+    /** True once AuraAndroidBridge.Awake() has completed on the Unity thread. */
+    val unityAwakeCompleted: Boolean = false,
+    /** True once AndroidJavaClass("…UnityAuraBridgeCallback") succeeded. */
+    val jniClassLoaded: Boolean = false,
+    /** True once CallStatic("onUnityReady") succeeded (same as isUnityReady once set). */
+    val jniCallStaticOk: Boolean = false,
+    /** Current Unity-side AuraState name ("Off","Starting","Active","Stopping","NULL"). */
+    val unityAuraState: String = "unknown",
+    /** Most recent JNI exception type:message, or "" if no error. */
+    val lastJniError: String = "",
+    /** Number of NotifyAndroidReady() retry attempts from Unity Update(). */
+    val jniRetryCount: Int = 0,
+    /** True once the first heartbeat has arrived from Unity. */
+    val heartbeatReceived: Boolean = false
+)
 
 /**
  * Android-side adapter responsible solely for sending commands from Khwab Android
@@ -37,8 +71,8 @@ import java.util.concurrent.CopyOnWriteArrayList
  * [UnityAuraBridgeCallback] after its Awake() completes — the queue is flushed
  * in FIFO order via [UnityPlayer.UnitySendMessage].
  *
- * This is a reliable callback-driven mechanism. It replaces the previous
- * heuristic 1 000 ms postDelayed approach in UnityAuraManager.
+ * This is a reliable callback-driven mechanism with a 500 ms retry loop on the
+ * Unity side (Update()) to handle classloader unavailability at Awake() time.
  *
  * The queue is thread-safe ([CopyOnWriteArrayList] with synchronized drain).
  * [onUnityReady] marshals to the Android main thread before flushing.
@@ -49,6 +83,7 @@ import java.util.concurrent.CopyOnWriteArrayList
 object UnityAuraBridge {
 
     private const val TAG = "UnityAuraBridge"
+    private const val DIAG = "[AURA-BRIDGE]"
 
     /** Name of the Unity GameObject that hosts AuraAndroidBridge.cs. */
     private const val BRIDGE_OBJECT = "AuraAndroidBridge"
@@ -68,6 +103,53 @@ object UnityAuraBridge {
      */
     private val _pendingQueue = CopyOnWriteArrayList<Pair<String, String>>()
 
+    // ── Diagnostic state — observable for the debug console ──────────────────
+
+    private val _diagnosticFlow = MutableStateFlow(AuraBridgeDiagnostic())
+
+    /**
+     * Live bridge diagnostic state.
+     * Collect in [AuraDebugConsole] to get reactive pipeline status updates.
+     */
+    val diagnosticFlow: StateFlow<AuraBridgeDiagnostic> = _diagnosticFlow.asStateFlow()
+
+    /** Whether Unity has signalled it is ready. */
+    val isUnityReady: Boolean get() = _isReady
+
+    /** Last command method sent or queued. Snapshot; use [diagnosticFlow] for reactivity. */
+    val lastCommandSent: String get() = _diagnosticFlow.value.lastCommandSent
+
+    /** Last callback method received from Unity. Snapshot; use [diagnosticFlow] for reactivity. */
+    val lastCallbackReceived: String get() = _diagnosticFlow.value.lastCallbackReceived
+
+    private fun emitDiagnostic(
+        ready: Boolean = _isReady,
+        command: String = _diagnosticFlow.value.lastCommandSent,
+        callback: String = _diagnosticFlow.value.lastCallbackReceived,
+        awakeStarted: Boolean    = _diagnosticFlow.value.unityAwakeStarted,
+        awakeCompleted: Boolean  = _diagnosticFlow.value.unityAwakeCompleted,
+        jniClassLoaded: Boolean  = _diagnosticFlow.value.jniClassLoaded,
+        jniCallStaticOk: Boolean = _diagnosticFlow.value.jniCallStaticOk,
+        unityAuraState: String   = _diagnosticFlow.value.unityAuraState,
+        lastJniError: String     = _diagnosticFlow.value.lastJniError,
+        jniRetryCount: Int       = _diagnosticFlow.value.jniRetryCount,
+        heartbeatReceived: Boolean = _diagnosticFlow.value.heartbeatReceived
+    ) {
+        _diagnosticFlow.value = AuraBridgeDiagnostic(
+            isUnityReady       = ready,
+            lastCommandSent    = command,
+            lastCallbackReceived = callback,
+            unityAwakeStarted  = awakeStarted,
+            unityAwakeCompleted = awakeCompleted,
+            jniClassLoaded     = jniClassLoaded,
+            jniCallStaticOk    = jniCallStaticOk,
+            unityAuraState     = unityAuraState,
+            lastJniError       = lastJniError,
+            jniRetryCount      = jniRetryCount,
+            heartbeatReceived  = heartbeatReceived
+        )
+    }
+
     // ── Public API ────────────────────────────────────────────────────────────
 
     /**
@@ -75,6 +157,8 @@ object UnityAuraBridge {
      * Unity side: [AuraAndroidBridge.ActivateAura] → [AuraLifecycleController.ActivateAura].
      */
     fun activate() {
+        Log.i(TAG, "$DIAG activate() called — isReady=$_isReady, queueSize=${_pendingQueue.size}")
+        emitDiagnostic(command = "ActivateAura")
         send("ActivateAura", "")
     }
 
@@ -164,15 +248,81 @@ object UnityAuraBridge {
      * Idempotent: subsequent calls after the first are no-ops.
      */
     fun onUnityReady() {
+        Log.i(TAG, "$DIAG onUnityReady() received from Unity scripting runtime (thread=${Thread.currentThread().name})")
         mainHandler.post {
             if (_isReady) {
-                Log.d(TAG, "onUnityReady() called again — already ready, ignoring")
+                Log.i(TAG, "$DIAG onUnityReady() — already ready, ignoring duplicate call")
                 return@post
             }
             _isReady = true
-            Log.d(TAG, "onUnityReady() — Unity ready, flushing ${_pendingQueue.size} queued commands")
+            emitDiagnostic(ready = true, callback = "onUnityReady", jniCallStaticOk = true)
+            val count = _pendingQueue.size
+            Log.i(TAG, "$DIAG onUnityReady() — _isReady=true, flushing $count queued command(s)")
             flushQueue()
+            Log.i(TAG, "$DIAG onUnityReady() — queue flush complete")
         }
+    }
+
+    /**
+     * Called by [UnityAuraBridgeCallback] when [AuraLifecycleController.cs] has finished
+     * fading in (transition progress reached 1.0).  Forwarded to [AuraBridge] so the
+     * Android-side state machine can advance from STARTING → ACTIVE.
+     *
+     * Marshalled to the Android main thread.
+     */
+    fun onAuraActivated() {
+        Log.i(TAG, "$DIAG onAuraActivated() received from Unity (thread=${Thread.currentThread().name})")
+        emitDiagnostic(callback = "onAuraActivated")
+        mainHandler.post {
+            Log.i(TAG, "$DIAG onAuraActivated() → forwarding to AuraBridge on main thread")
+            AuraBridge.onUnityAuraActivated()
+        }
+    }
+
+    /**
+     * Called by [UnityAuraBridgeCallback] when [AuraLifecycleController.cs] has finished
+     * fading out (transition progress reached 0.0).  Forwarded to [AuraBridge] so the
+     * Android-side state machine can advance from STOPPING → OFF and restore the normal UI.
+     *
+     * Marshalled to the Android main thread.
+     */
+    fun onAuraDeactivated() {
+        mainHandler.post {
+            Log.d(TAG, "onAuraDeactivated() — Unity Aura fade-out complete")
+            AuraBridge.onUnityAuraDeactivated()
+        }
+    }
+
+    /**
+     * Called by [UnityAuraBridgeCallback.onUnityHeartbeat] with the full Unity-side
+     * diagnostic snapshot.  Updates [diagnosticFlow] so [AuraDebugConsole] can display
+     * the exact JNI failure on-device without ADB.
+     *
+     * Invoked on the Unity thread — emits to the StateFlow directly (StateFlow.value
+     * assignment is thread-safe).
+     */
+    fun onUnityHeartbeat(
+        awakeStarted: Boolean,
+        awakeCompleted: Boolean,
+        jniClassOk: Boolean,
+        callStaticOk: Boolean,
+        auraState: String,
+        lastJniError: String,
+        retryCount: Int
+    ) {
+        Log.d(TAG, "$DIAG onUnityHeartbeat() — awake=$awakeStarted/$awakeCompleted" +
+                   ", jni=$jniClassOk/$callStaticOk, state=$auraState" +
+                   ", retries=$retryCount, err=${lastJniError.ifEmpty { "none" }}")
+        emitDiagnostic(
+            awakeStarted     = awakeStarted,
+            awakeCompleted   = awakeCompleted,
+            jniClassLoaded   = jniClassOk,
+            jniCallStaticOk  = callStaticOk,
+            unityAuraState   = auraState,
+            lastJniError     = lastJniError,
+            jniRetryCount    = retryCount,
+            heartbeatReceived = true
+        )
     }
 
     // ── Internal ──────────────────────────────────────────────────────────────
@@ -188,10 +338,11 @@ object UnityAuraBridge {
         synchronized(_pendingQueue) {
             if (!_isReady) {
                 _pendingQueue.add(method to param)
-                Log.d(TAG, "Queued [$method, \"$param\"] (Unity not yet ready)")
+                Log.i(TAG, "$DIAG send() — Unity not ready, queued [$method, \"$param\"] — queue now has ${_pendingQueue.size} item(s)")
                 return
             }
         }
+        Log.i(TAG, "$DIAG send() — Unity ready, sending [$method, \"$param\"] immediately")
         // Unity is ready — flush any still-queued commands first to maintain FIFO order,
         // then send the new command.
         flushQueue()
@@ -219,10 +370,11 @@ object UnityAuraBridge {
      */
     private fun sendDirect(method: String, param: String) {
         try {
+            Log.i(TAG, "$DIAG UnitySendMessage(\"$BRIDGE_OBJECT\", \"$method\", \"$param\") — calling now")
             UnityPlayer.UnitySendMessage(BRIDGE_OBJECT, method, param)
-            Log.d(TAG, "UnitySendMessage(\"$BRIDGE_OBJECT\", \"$method\", \"$param\")")
+            Log.i(TAG, "$DIAG UnitySendMessage(\"$BRIDGE_OBJECT\", \"$method\", \"$param\") — returned without exception")
         } catch (e: Exception) {
-            Log.e(TAG, "UnitySendMessage($method) failed: ${e.message}")
+            Log.e(TAG, "$DIAG UnitySendMessage($method) FAILED: ${e.javaClass.simpleName}: ${e.message}")
         }
     }
 }

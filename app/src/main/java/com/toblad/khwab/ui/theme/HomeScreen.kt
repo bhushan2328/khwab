@@ -1,11 +1,13 @@
 package com.toblad.khwab.ui.theme
 
 import com.toblad.khwab.BuildConfig
-import androidx.compose.runtime.collectAsState
-import androidx.compose.runtime.getValue
-
 import androidx.compose.animation.AnimatedContent
+import androidx.compose.animation.core.FastOutSlowInEasing
+import androidx.compose.animation.core.RepeatMode
+import androidx.compose.animation.core.animateFloat
 import androidx.compose.animation.core.animateFloatAsState
+import androidx.compose.animation.core.infiniteRepeatable
+import androidx.compose.animation.core.rememberInfiniteTransition
 import androidx.compose.animation.core.tween
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
@@ -25,14 +27,18 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.navigationBars
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.safeDrawing
+import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.windowInsetsPadding
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
+import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -45,6 +51,7 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import com.toblad.khwab.aura.model.AuraState
 import com.toblad.khwab.aura.model.TimePhase
 import com.toblad.khwab.state.AssistantState
 import com.toblad.khwab.state.AssistantStateManager
@@ -74,6 +81,7 @@ fun HomeScreen(
 
     val auraTheme = ThemeController.currentAuraTheme
     val auraActive = ThemeController.currentTheme == ThemeMode.AURA
+    val auraState = auraTheme.auraState
     val icons = AuraIconProvider.homeIcons(
         auraActive = auraActive,
         weather    = auraTheme.weatherState,
@@ -198,6 +206,25 @@ fun HomeScreen(
                                 )
                             )
                     )
+                }
+
+                // ── STARTING state indicator ──────────────────────────────────
+                // A lightweight "Awakening Aura…" pill that fades in while Unity
+                // is loading and fades out once ACTIVE is reached.
+                // Stays close to the top of the free area; non-blocking.
+                val indicatorAlpha by animateFloatAsState(
+                    targetValue = if (auraState == AuraState.STARTING) 1f else 0f,
+                    animationSpec = tween(durationMillis = 500),
+                    label = "aura_indicator_alpha"
+                )
+                if (indicatorAlpha > 0f) {
+                    Box(
+                        modifier = Modifier
+                            .align(Alignment.TopCenter)
+                            .alpha(indicatorAlpha)
+                    ) {
+                        AuraAwakeningIndicator(isDaytime = isDaytime)
+                    }
                 }
 
                 Column(
@@ -329,6 +356,69 @@ fun HomeScreen(
                     Spacer(modifier = Modifier.height(12.dp))
                 }
             }
+        }
+    }
+}
+
+// ── Aura Awakening Indicator ──────────────────────────────────────────────────
+// Lightweight non-blocking pill shown only while AuraState == STARTING.
+// Fades away automatically once Unity reports ACTIVE.
+
+@Composable
+private fun AuraAwakeningIndicator(isDaytime: Boolean) {
+    val colors = MaterialTheme.colorScheme
+
+    // Gentle pulse on the progress ring — only two frames of animation per second
+    // equivalent, driven by an infinite tween. Cheap on low-end devices.
+    val breathTransition = rememberInfiniteTransition(label = "aura_awaken_breath")
+    val pulse by breathTransition.animateFloat(
+        initialValue = 0.55f,
+        targetValue  = 1.0f,
+        animationSpec = infiniteRepeatable(
+            animation = tween(durationMillis = 900, easing = FastOutSlowInEasing),
+            repeatMode = RepeatMode.Reverse
+        ),
+        label = "aura_indicator_pulse"
+    )
+
+    val pillBg = if (isDaytime)
+        Color.White.copy(alpha = 0.70f)
+    else
+        Color(0xFF0A0C18).copy(alpha = 0.78f)
+
+    val textColor = if (isDaytime)
+        Color(0xFF1A1A2E).copy(alpha = 0.80f)
+    else
+        colors.onSurface.copy(alpha = 0.75f)
+
+    val ringColor = if (isDaytime)
+        colors.primary.copy(alpha = pulse * 0.85f)
+    else
+        colors.tertiary.copy(alpha = pulse)
+
+    Surface(
+        shape = RoundedCornerShape(20.dp),
+        color = pillBg,
+        modifier = Modifier.padding(top = 18.dp)
+    ) {
+        Row(
+            modifier = Modifier.padding(horizontal = 14.dp, vertical = 8.dp),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(8.dp)
+        ) {
+            CircularProgressIndicator(
+                modifier = Modifier.size(14.dp),
+                strokeWidth = 1.5.dp,
+                color = ringColor,
+                trackColor = Color.Transparent
+            )
+            Text(
+                text = "Awakening Aura…",
+                style = MaterialTheme.typography.labelSmall,
+                color = textColor,
+                fontWeight = FontWeight.Medium,
+                letterSpacing = 0.3.sp
+            )
         }
     }
 }

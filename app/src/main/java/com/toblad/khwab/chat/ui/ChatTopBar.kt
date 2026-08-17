@@ -2,10 +2,11 @@ package com.toblad.khwab.chat.ui
 
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
-import androidx.compose.foundation.layout.fillMaxWidth
-import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.statusBars
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
@@ -33,6 +34,7 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
 import com.toblad.khwab.aura.model.TimePhase
 import com.toblad.khwab.ui.theme.ThemeController
 import com.toblad.khwab.ui.theme.ThemeMode
@@ -47,20 +49,22 @@ fun ChatTopBar(
     var menuExpanded by remember { mutableStateOf(false) }
 
     val auraActive = ThemeController.currentTheme == ThemeMode.AURA
-    // fix #20: split daytime vs night Aura for the bar
     val isDaytimeAura = auraActive && ThemeController.currentAuraTheme.timePhase in listOf(
         TimePhase.SUNRISE, TimePhase.MORNING, TimePhase.NOON, TimePhase.AFTERNOON
     )
 
     val containerColor = when {
-        isDaytimeAura -> Color.White.copy(alpha = 0.65f)    // frosted white over bright sky
-        auraActive    -> colors.surface.copy(alpha = 0.80f)  // semi-transparent dark for night
+        isDaytimeAura -> Color.White.copy(alpha = 0.72f)   // frosted white over bright sky
+        auraActive    -> colors.surface.copy(alpha = 0.78f) // semi-transparent for night/dusk/dawn
         else          -> colors.surface
     }
-    // fix #20: dark text/icons on daytime frosted white bar
+    // Ensure readable contrast for both daytime frosted and default dark
     val contentColor = if (isDaytimeAura) Color(0xFF1A1A2E) else colors.onSurface
+    val subtitleColor = if (isDaytimeAura) Color(0xFF3D3D5C).copy(alpha = 0.75f)
+                        else colors.onSurfaceVariant
 
     TopAppBar(
+        windowInsets = WindowInsets.statusBars,
         colors = TopAppBarDefaults.topAppBarColors(
             containerColor = containerColor,
             titleContentColor = contentColor,
@@ -68,7 +72,10 @@ fun ChatTopBar(
             actionIconContentColor = contentColor
         ),
         navigationIcon = {
-            IconButton(onClick = onBackClick) {
+            IconButton(
+                onClick = onBackClick,
+                modifier = Modifier.size(48.dp)
+            ) {
                 Icon(
                     imageVector = Icons.AutoMirrored.Filled.ArrowBack,
                     contentDescription = "Back"
@@ -78,14 +85,14 @@ fun ChatTopBar(
         title = {
             Row(
                 verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.spacedBy(8.dp)
+                horizontalArrangement = Arrangement.spacedBy(10.dp)
             ) {
-                // Assistant avatar badge — fix #23: visible on daytime frosted bar
+                // Assistant avatar badge
                 Surface(
                     modifier = Modifier
-                        .size(28.dp)
-                        .clip(RoundedCornerShape(8.dp)),
-                    color = if (isDaytimeAura) colors.primary.copy(alpha = 0.20f)
+                        .size(30.dp)
+                        .clip(RoundedCornerShape(9.dp)),
+                    color = if (isDaytimeAura) colors.primary.copy(alpha = 0.18f)
                             else colors.primaryContainer
                 ) {
                     Box(contentAlignment = Alignment.Center) {
@@ -98,19 +105,32 @@ fun ChatTopBar(
                     }
                 }
 
-                Text(
-                    text = "Khwab",
-                    style = MaterialTheme.typography.titleLarge,
-                    fontWeight = FontWeight.Bold,
-                    color = colors.onSurface
-                )
+                Column(verticalArrangement = Arrangement.spacedBy(0.dp)) {
+                    Text(
+                        text = "Khwab",
+                        style = MaterialTheme.typography.titleMedium,
+                        fontWeight = FontWeight.Bold,
+                        color = contentColor,
+                        lineHeight = 18.sp
+                    )
+                    Text(
+                        text = "AI assistant",
+                        style = MaterialTheme.typography.labelSmall,
+                        color = subtitleColor,
+                        lineHeight = 14.sp,
+                        letterSpacing = 0.3.sp
+                    )
+                }
             }
         },
         actions = {
-            IconButton(onClick = { menuExpanded = true }) {
+            IconButton(
+                onClick = { menuExpanded = true },
+                modifier = Modifier.size(48.dp)
+            ) {
                 Icon(
                     imageVector = Icons.Default.MoreVert,
-                    contentDescription = "Menu"
+                    contentDescription = "More options"
                 )
             }
 
@@ -119,7 +139,7 @@ fun ChatTopBar(
                 onDismissRequest = { menuExpanded = false }
             ) {
                 DropdownMenuItem(
-                    text = { Text("Clear Chat") },
+                    text = { Text("Clear chat") },
                     leadingIcon = {
                         Icon(
                             imageVector = Icons.Default.DeleteSweep,
